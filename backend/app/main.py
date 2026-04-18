@@ -1,5 +1,5 @@
-import fastapi
+from fastapi import FastAPI
 from .routers import health
 
-app = fastapi.FastAPI()
+app = FastAPI()
 app.include_router(health.router)
