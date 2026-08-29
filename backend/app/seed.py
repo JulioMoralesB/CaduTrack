@@ -25,6 +25,10 @@ logger = logging.getLogger("app.seed")
 
 # Spanish, because these are user-facing labels the user edits directly.
 # Unlike Product.location, category names are data rather than keys.
+#
+# Deliberately no "Congelados": frozen is a storage state, already covered by
+# Product.location == "freezer". Frozen peas are Verduras that live in the
+# freezer, and categorising them by location would weaken the category filter.
 DEFAULT_CATEGORIES: tuple[str, ...] = (
     "Lácteos",
     "Carnes",
@@ -33,7 +37,6 @@ DEFAULT_CATEGORIES: tuple[str, ...] = (
     "Cereales",
     "Bebidas",
     "Snacks",
-    "Congelados",
     "Otros",
 )
 

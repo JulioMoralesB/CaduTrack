@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,19 +15,15 @@ engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     future=True,
-    connect_args={"connect_timeout": settings.db_connect_timeout},
+    connect_args={
+        "connect_timeout": settings.db_connect_timeout,
+        # Pin the schema at connection setup rather than with a SET statement.
+        # apollo-server-db is shared, so we never rely on the default
+        # search_path — and a SET issued from a "connect" event runs inside a
+        # transaction that SQLAlchemy later rolls back, silently losing it.
+        "options": f"-c search_path={settings.db_schema},public",
+    },
 )
-
-
-@event.listens_for(engine, "connect")
-def _set_search_path(dbapi_connection, connection_record):
-    """Pin every new connection to CaduTrack's schema.
-
-    The apollo-server-db instance is shared across services, so we never rely on
-    the default search_path.
-    """
-    with dbapi_connection.cursor() as cursor:
-        cursor.execute(f'SET search_path TO "{settings.db_schema}", public')
 
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)

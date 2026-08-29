@@ -19,6 +19,15 @@ def test_default_categories_are_in_spanish():
     assert "Lácteos" in DEFAULT_CATEGORIES
 
 
+def test_no_category_duplicates_a_storage_location():
+    """Storage state belongs in Product.location, not in the category list.
+
+    A "Congelados" category would compete with location == "freezer" and make
+    the category filter describe where food is rather than what it is.
+    """
+    assert "Congelados" not in DEFAULT_CATEGORIES
+
+
 @pytest.mark.integration
 def test_seeding_twice_inserts_nothing_the_second_time(db_session):
     """The script runs on every deploy, so it must be idempotent."""

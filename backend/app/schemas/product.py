@@ -1,0 +1,46 @@
+"""Product request and response schemas."""
+
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models import Location
+from app.schemas.category import CategoryRead
+
+
+class ProductBase(BaseModel):
+    """Fields a client may set on a product."""
+
+    name: str = Field(min_length=1, max_length=255)
+    category_id: int | None = None
+    # gt=0 mirrors ck_products_quantity_positive, so a bad value is rejected
+    # with a readable 422 instead of a database integrity error.
+    quantity: Decimal = Field(default=Decimal(1), gt=0, max_digits=10, decimal_places=2)
+    unit: str | None = Field(default=None, max_length=50)
+    expires_at: date
+    location: Location
+    notes: str | None = None
+
+
+class ProductCreate(ProductBase):
+    """Payload for creating a product."""
+
+
+class ProductUpdate(ProductBase):
+    """Payload for replacing a product.
+
+    PUT semantics: every field is sent, and omitted optional fields are cleared.
+    """
+
+
+class ProductRead(ProductBase):
+    """A product as returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    # Nested so the list view can show the category name without a second call.
+    category: CategoryRead | None = None
+    created_at: datetime
+    updated_at: datetime
