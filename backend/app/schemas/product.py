@@ -3,8 +3,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.expiry import ExpiryStatus, days_until_expiry, expiry_status
 from app.models import Location
 from app.schemas.category import CategoryRead
 
@@ -44,3 +45,15 @@ class ProductRead(ProductBase):
     category: CategoryRead | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def days_until_expiry(self) -> int:
+        """Whole days left. Negative once the product has expired."""
+        return days_until_expiry(self.expires_at)
+
+    @computed_field
+    @property
+    def status(self) -> ExpiryStatus:
+        """fresh / expiring_soon / expired, for the colour coding in #16."""
+        return expiry_status(self.days_until_expiry)

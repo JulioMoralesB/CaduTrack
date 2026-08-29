@@ -137,3 +137,34 @@ def test_delete_removes_the_product(api_client):
 def test_missing_product_is_404(api_client, method, path):
     kwargs = {"json": _product()} if method == "put" else {}
     assert getattr(api_client, method)(path, **kwargs).status_code == 404
+
+
+def test_response_carries_days_until_expiry_and_status(api_client):
+    """What the colour coding in #16 reads off each row."""
+    from app.expiry import today
+
+    reference = today()
+    cases = {
+        "Yogur": (-2, "expired"),
+        "Leche": (0, "expiring_soon"),
+        "Jamón": (7, "expiring_soon"),
+        "Arroz": (8, "fresh"),
+    }
+    for name, (offset, _) in cases.items():
+        api_client.post("/products", json=_product(name=name, expires_at=str(reference + timedelta(days=offset))))
+
+    for product in api_client.get("/products").json():
+        offset, expected_status = cases[product["name"]]
+        assert product["days_until_expiry"] == offset
+        assert product["status"] == expected_status
+
+
+def test_a_product_expiring_today_is_not_shown_as_expired(api_client):
+    """Explicitly: today is yellow, not red."""
+    from app.expiry import today
+
+    api_client.post("/products", json=_product(expires_at=str(today())))
+
+    product = api_client.get("/products").json()[0]
+    assert product["days_until_expiry"] == 0
+    assert product["status"] == "expiring_soon"

@@ -68,8 +68,12 @@ cadutrack/
 | Status          | Condition                  |
 |-----------------|----------------------------|
 | `fresh`         | `days_until_expiry > 7`    |
-| `expiring_soon` | `days_until_expiry` 1–7    |
-| `expired`       | `days_until_expiry <= 0`   |
+| `expiring_soon` | `days_until_expiry` 0–7    |
+| `expired`       | `days_until_expiry < 0`    |
+
+A product expiring **today** counts as `expiring_soon`, not `expired` — it is
+still edible, and the point is to prompt the user to use it. "Today" is
+evaluated in `TIMEZONE`, not the host's local zone.
 
 ---
 
