@@ -129,11 +129,15 @@ cp .env.example .env
 # Edit .env with your database URL, Telegram bot token, etc.
 ```
 
-Run migrations:
+Run migrations and seed the default categories:
 
 ```bash
 alembic upgrade head
+python -m app.seed
 ```
+
+The seed is idempotent — re-running it inserts only categories that are missing,
+so it is safe to run on every deploy.
 
 Start the server:
 
