@@ -146,8 +146,11 @@ so it is safe to run on every deploy.
 Start the server:
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8001
 ```
+
+> Port 8001, not the FastAPI default: `free-games-notifier` already publishes
+> 8000 on the host.
 
 ### Frontend
 
