@@ -19,8 +19,8 @@ A food expiry tracker app to register purchased food items, their expiration dat
 | Layer      | Technology                              |
 |------------|-----------------------------------------|
 | Frontend   | React + Vite + TypeScript (PWA enabled) |
-| Backend    | FastAPI + PostgreSQL                    |
-| Migrations | yoyo-migrations (schema-per-API)        |
+| Backend    | FastAPI + SQLAlchemy + PostgreSQL       |
+| Migrations | Alembic (schema-per-service)            |
 | Alerts     | APScheduler + Telegram Bot API          |
 | Hosting    | Home server via Cloudflare Tunnel       |
 
@@ -59,6 +59,10 @@ cadutrack/
 | created_at | timestamp                         |
 | updated_at | timestamp                         |
 
+> CaduTrack owns the database `cadutrack` and the schema `cadutrack` inside the
+> shared `apollo-server-db` PostgreSQL instance. It does not run its own database
+> server. Alembic's version table lives in `public`.
+
 ### Expiry Status Logic
 
 | Status          | Condition                  |
@@ -73,12 +77,12 @@ cadutrack/
 
 | Phase   | Scope                        | Issues   |
 |---------|------------------------------|----------|
-| Phase 0 | Foundation                   | #1–#4    |
-| Phase 1 | Backend Core                 | #5–#10   |
-| Phase 2 | Frontend                     | #11–#16  |
-| Phase 3 | Telegram Alerts              | #17–#20  |
-| Phase 4 | PWA & Deployment             | #21–#26  |
-| Phase 5 | Enhancements / Backlog       | #27–#30  |
+| Phase 0 | Foundation                   | #1–#3, #38 |
+| Phase 1 | Backend Core                 | #8–#13   |
+| Phase 2 | Frontend                     | #14–#19  |
+| Phase 3 | Telegram Alerts              | #20–#23  |
+| Phase 4 | PWA & Deployment             | #24–#29, #37 |
+| Phase 5 | Enhancements / Backlog       | #30–#33, #36 |
 
 ---
 
@@ -87,14 +91,14 @@ cadutrack/
 This project follows a **branch-per-issue** strategy:
 
 ```
-feature/<issue-number>-<short-description>
+<type>-<issue-number>/<short-description>
 ```
 
 **Examples:**
 ```
-feature/5-database-migrations
-feature/11-product-list-ui
-feature/17-telegram-bot-setup
+feat-8/database-migrations
+feat-15/product-list-ui
+fix-21/expiry-alert-timezone
 ```
 
 Steps for each issue:
@@ -113,9 +117,9 @@ Steps for each issue:
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+python -m venv env
+source env/bin/activate
+pip install -r requirements-dev.txt
 ```
 
 Configure environment variables:
@@ -128,7 +132,7 @@ cp .env.example .env
 Run migrations:
 
 ```bash
-yoyo apply
+alembic upgrade head
 ```
 
 Start the server:
@@ -149,12 +153,20 @@ npm run dev
 
 ## Environment Variables
 
-| Variable              | Description                          |
-|-----------------------|--------------------------------------|
-| `DATABASE_URL`        | PostgreSQL connection string         |
-| `TELEGRAM_BOT_TOKEN`  | Token from @BotFather                |
-| `TELEGRAM_CHAT_ID`    | Target chat ID for alerts            |
-| `ALERT_DAYS_BEFORE`   | Days before expiry to trigger alert  |
+See [`backend/.env.example`](backend/.env.example) for the full documented list.
+
+| Variable              | Description                                        |
+|-----------------------|----------------------------------------------------|
+| `DB_HOST` / `DB_PORT` | Shared `apollo-server-db` host and port            |
+| `DB_NAME`             | Database owned by this service (`cadutrack`)       |
+| `DB_USER` / `DB_PASSWORD` | PostgreSQL credentials                         |
+| `DB_SCHEMA`           | Schema owned by this service (`cadutrack`)         |
+| `API_KEY`             | Protects mutating endpoints via `X-API-Key`        |
+| `TELEGRAM_BOT_TOKEN`  | Token from @BotFather                              |
+| `TELEGRAM_CHAT_ID`    | Target chat ID for alerts                          |
+| `ALERT_DAYS_AHEAD`    | Days before expiry to trigger alert                |
+| `TIMEZONE`            | IANA timezone for log timestamps and alert times   |
+| `LOG_FILE`            | Rotating JSON log path; empty means stdout only    |
 
 ---
 
