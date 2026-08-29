@@ -5,6 +5,7 @@
   --text-muted: #5f6b5a;
   --border: #dfe3db;
   --accent: #3f7d3a;
+  --danger: #b03434;
   /* Neutral until #16 assigns a colour per expiry status. */
   --status-fresh: var(--border);
   --status-expiring-soon: var(--border);
@@ -25,6 +26,7 @@
     --text-muted: #a3ac9c;
     --border: #333a2d;
     --accent: #8fc98a;
+    --danger: #e08585;
   }
 }
 
@@ -63,4 +65,51 @@ button {
 
 button:hover {
   border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.button--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+.button--danger-text {
+  color: var(--danger);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+textarea {
+  resize: vertical;
 }

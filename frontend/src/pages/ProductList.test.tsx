@@ -1,15 +1,28 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductList } from '@/pages/ProductList'
 import type { Product } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
   listProducts: vi.fn(),
+  createProduct: vi.fn(),
+  replaceProduct: vi.fn(),
+  deleteProduct: vi.fn(),
 }))
 
-const { listProducts } = await import('@/services/productsService')
-const mockedList = vi.mocked(listProducts)
+vi.mock('@/services/categoriesService', () => ({
+  listCategories: vi.fn(),
+}))
+
+const products = await import('@/services/productsService')
+const categories = await import('@/services/categoriesService')
+
+const mockedList = vi.mocked(products.listProducts)
+const mockedCreate = vi.mocked(products.createProduct)
+const mockedReplace = vi.mocked(products.replaceProduct)
+const mockedDelete = vi.mocked(products.deleteProduct)
+const mockedCategories = vi.mocked(categories.listCategories)
 
 function product(overrides: Partial<Product> = {}): Product {
   return {
@@ -29,6 +42,13 @@ function product(overrides: Partial<Product> = {}): Product {
     ...overrides,
   }
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockedCategories.mockResolvedValue([
+    { id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' },
+  ])
+})
 
 describe('ProductList', () => {
   it('renders each product with its details', async () => {
@@ -51,7 +71,8 @@ describe('ProductList', () => {
 
     render(<ProductList />)
 
-    const names = (await screen.findAllByRole('heading', { level: 2 })).map((h) => h.textContent)
+    await screen.findByText('Yogur')
+    const names = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(names).toEqual(['Yogur', 'Queso', 'Arroz'])
   })
 
@@ -87,5 +108,146 @@ describe('ProductList', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+  })
+})
+
+describe('creating a product', () => {
+  it('sends the form and reloads the list', async () => {
+    mockedList.mockResolvedValue([])
+    mockedCreate.mockResolvedValue(product())
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    fireEvent.change(screen.getByLabelText('Cantidad'), { target: { value: '12' } })
+    fireEvent.change(screen.getByLabelText('Unidad'), { target: { value: 'piezas' } })
+    fireEvent.change(screen.getByLabelText('Dónde está'), { target: { value: 'fridge' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
+    expect(mockedCreate).toHaveBeenCalledWith({
+      name: 'Huevos',
+      category_id: null,
+      quantity: '12',
+      unit: 'piezas',
+      expires_at: '2026-09-10',
+      location: 'fridge',
+      notes: null,
+    })
+    // Two calls: the initial load and the reload after saving.
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+  })
+
+  it('sends empty optional fields as null rather than empty strings', async () => {
+    mockedList.mockResolvedValue([])
+    mockedCreate.mockResolvedValue(product())
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Sal' } })
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2027-01-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
+    expect(mockedCreate.mock.calls[0][0]).toMatchObject({ unit: null, notes: null, category_id: null })
+  })
+
+  it('keeps the form open and explains why when saving fails', async () => {
+    mockedList.mockResolvedValue([])
+    const { AxiosError, AxiosHeaders } = await import('axios')
+    const failure = new AxiosError('Request failed')
+    failure.response = {
+      data: { detail: 'Category 9999 does not exist' },
+      status: 422,
+      statusText: '',
+      headers: new AxiosHeaders(),
+      config: { headers: new AxiosHeaders() },
+    }
+    mockedCreate.mockRejectedValue(failure)
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Category 9999 does not exist')
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Huevos')
+  })
+})
+
+describe('editing a product', () => {
+  it('opens prefilled with the product and replaces it on save', async () => {
+    const existing = product({
+      id: 7,
+      name: 'Yogur griego',
+      quantity: '4.00',
+      unit: 'piezas',
+      notes: 'abierto',
+      category_id: 3,
+      category: { id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' },
+    })
+    mockedList.mockResolvedValue([existing])
+    mockedReplace.mockResolvedValue(existing)
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Yogur griego' }))
+
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Yogur griego')
+    // "4.00" from the API must not show up as-is in a number field.
+    expect(screen.getByLabelText('Cantidad')).toHaveValue(4)
+    expect(screen.getByLabelText('Notas')).toHaveValue('abierto')
+    expect(screen.getByLabelText('Categoría')).toHaveValue('3')
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Yogur natural' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => expect(mockedReplace).toHaveBeenCalledTimes(1))
+    expect(mockedReplace).toHaveBeenCalledWith(7, expect.objectContaining({ name: 'Yogur natural' }))
+  })
+})
+
+describe('deleting a product', () => {
+  it('asks before deleting and does nothing on cancel', async () => {
+    mockedList.mockResolvedValue([product()])
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Leche entera' }))
+
+    expect(screen.getByText(/¿Seguro que quieres eliminar "Leche entera"\?/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(mockedDelete).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('deletes and reloads once confirmed', async () => {
+    mockedList.mockResolvedValue([product()])
+    mockedDelete.mockResolvedValue(undefined)
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Leche entera' }))
+    // Exactly "Eliminar" — the card's button is labelled "Eliminar Leche entera".
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
+
+    await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('the overlay', () => {
+  it('closes on Escape', async () => {
+    mockedList.mockResolvedValue([])
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
