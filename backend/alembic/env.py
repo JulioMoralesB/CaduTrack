@@ -35,6 +35,18 @@ if alembic_config.config_file_name is not None and not logging.root.handlers:
 target_metadata = Base.metadata
 
 
+def _include_name(name, type_, parent_names) -> bool:
+    """Restrict reflection to the schema this service owns.
+
+    include_schemas=True makes Alembic reflect every schema in the database.
+    Without this filter it also reflects public — where its own alembic_version
+    table lives — and autogenerate proposes dropping it.
+    """
+    if type_ == "schema":
+        return name == settings.db_schema
+    return True
+
+
 def _configure(**kwargs) -> None:
     """Shared context.configure options for both offline and online modes."""
     context.configure(
@@ -43,6 +55,7 @@ def _configure(**kwargs) -> None:
         # convention used by the other apollo-server services.
         version_table_schema="public",
         include_schemas=True,
+        include_name=_include_name,
         compare_type=True,
         **kwargs,
     )

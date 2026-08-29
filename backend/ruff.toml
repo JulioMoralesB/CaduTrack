@@ -4,6 +4,15 @@
 
 line-length = 120
 
+# Top-level, not under [lint]: keys placed after a table header belong to that
+# table, and lint.exclude does not stop file discovery the way this does.
+# Don't lint generated files or local scratch dirs.
+exclude = [
+    "alembic/versions",
+    "env",
+    ".venv",
+]
+
 [lint]
 # E/W = pycodestyle errors/warnings
 # F   = pyflakes (undefined names, unused imports, etc.)
@@ -12,11 +21,4 @@ select = ["E", "W", "F", "I"]
 
 ignore = [
     "E501",  # line too long — enforced by line-length above, but some strings are intentionally long
-]
-
-# Don't lint generated files or local scratch dirs
-exclude = [
-    "alembic/versions/",
-    "env/",
-    ".venv/",
 ]
