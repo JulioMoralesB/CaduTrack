@@ -8,7 +8,7 @@ from app.main import app
 
 @pytest.fixture
 def client() -> TestClient:
-    """FastAPI test client for the CaduTrack app."""
+    """FastAPI test client with no database wiring."""
     return TestClient(app)
 
 
@@ -16,8 +16,12 @@ def client() -> TestClient:
 def db_session():
     """Session against a live database, skipping when one is not reachable.
 
-    Used by tests marked `integration`; CI excludes that marker.
+    Tables are emptied before each test rather than after, so a failing test
+    leaves its rows behind for inspection.
+
+    Used by tests marked `integration`.
     """
+    from sqlalchemy import text
     from sqlalchemy.exc import SQLAlchemyError
 
     from app.db.session import SessionLocal, check_connection
@@ -26,6 +30,8 @@ def db_session():
         pytest.skip("no reachable database")
 
     session = SessionLocal()
+    session.execute(text("TRUNCATE products, categories RESTART IDENTITY CASCADE"))
+    session.commit()
     try:
         yield session
     except SQLAlchemyError:
@@ -33,3 +39,13 @@ def db_session():
         raise
     finally:
         session.close()
+
+
+@pytest.fixture
+def api_client(db_session) -> TestClient:
+    """Test client whose requests share the test's database session."""
+    from app.db.session import get_db
+
+    app.dependency_overrides[get_db] = lambda: db_session
+    yield TestClient(app)
+    app.dependency_overrides.clear()

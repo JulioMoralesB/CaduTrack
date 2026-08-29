@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.logging_config import setup_logging
-from app.routers import health
+from app.routers import categories, health, products
 
 # Configure structured logging before anything else emits a record.
 setup_logging(
@@ -27,5 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(categories.router)
+app.include_router(products.router)
 
 logger.info("CaduTrack API started")
