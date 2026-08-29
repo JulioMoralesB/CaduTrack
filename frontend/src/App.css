@@ -1,184 +1,115 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
+/* Mobile-first: this is used standing in front of an open fridge, on a phone. */
 
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+.app {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+.app__header {
+  padding: 0.5rem 0 1.25rem;
 }
 
-#center {
+.app__header h1 {
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.app__tagline {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.product-list {
   display: flex;
   flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
+  gap: 0.625rem;
 }
 
-#next-steps {
+.product-card {
   display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  /* The status stripe is the fastest thing to scan down a long list. */
+  border-left: 4px solid var(--border);
+  border-radius: 0.625rem;
 }
 
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
+.product-card--fresh {
+  border-left-color: var(--status-fresh);
 }
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
+.product-card--expiring_soon {
+  border-left-color: var(--status-expiring-soon);
+}
+
+.product-card--expired {
+  border-left-color: var(--status-expired);
+}
+
+.product-card__name {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.product-card__meta {
   display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
 
-  .logo {
-    height: 18px;
+.product-card__uncategorised {
+  font-style: italic;
+}
+
+.product-card__notes {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.product-card__expiry {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.state {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.state--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.state__hint {
+  margin-top: 0.375rem;
+  font-size: 0.875rem;
+}
+
+/* From tablet up there is room to put the expiry beside the details. */
+@media (min-width: 30rem) {
+  .app {
+    padding: 2rem 1.5rem 4rem;
   }
 
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
+  .product-card {
+    flex-direction: row;
     align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
+    justify-content: space-between;
+    gap: 1rem;
   }
 
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
-}
-
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
-}
-
-.ticks {
-  position: relative;
-  width: 100%;
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
-
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
+  .product-card__expiry {
+    text-align: right;
+    white-space: nowrap;
   }
 }

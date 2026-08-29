@@ -40,7 +40,8 @@ class Settings(BaseSettings):
 
     # ── API ──────────────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    # Not 8000: free-games-notifier already publishes that port on the host.
+    api_port: int = 8001
     # When set, mutating endpoints require this value in the X-API-Key header.
     api_key: str = ""
     # Origins allowed to call the API from a browser (comma-separated in .env).
