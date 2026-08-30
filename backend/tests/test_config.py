@@ -34,7 +34,7 @@ def test_cors_origins_are_split_and_trimmed():
 
 
 def test_log_record_matches_the_shared_json_shape():
-    """Logs must carry the fields Promtail extracts for every apollo-server service."""
+    """Logs must carry the fields the shared structured-log contract promotes."""
     formatter = _JsonFormatter(fmt="%(message)s", tz="America/Mexico_City")
     record = logging.LogRecord(
         name="app.routers.products",
