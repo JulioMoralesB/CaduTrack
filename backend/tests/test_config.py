@@ -3,8 +3,10 @@
 import json
 import logging
 
+import pytest
+
 from app.config import Settings
-from app.logging_config import SERVICE_NAME, _JsonFormatter
+from app.logging_config import SERVICE_NAME, _AccessLogFilter, _JsonFormatter, configure_framework_loggers
 
 
 def test_database_url_is_built_from_parts():
@@ -64,3 +66,78 @@ def test_unknown_timezone_falls_back_to_utc():
         msg="hi", args=(), exc_info=None,
     )
     assert json.loads(formatter.format(record))["timestamp"].endswith("+00:00")
+
+
+def _access_record(status: int, path: str = "/products") -> logging.LogRecord:
+    """A record shaped like the one uvicorn's access logger emits."""
+    return logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=("172.19.0.7:36330", "GET", path, "1.1", status),
+        exc_info=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "status,expected",
+    [(200, "INFO"), (201, "INFO"), (304, "INFO"), (404, "WARNING"), (422, "WARNING"), (500, "ERROR"), (503, "ERROR")],
+)
+def test_access_log_severity_follows_the_status_code(status, expected):
+    """Uvicorn logs every request at INFO, so a 500 would hide among the 200s."""
+    record = _access_record(status)
+
+    _AccessLogFilter().filter(record)
+
+    assert record.levelname == expected
+
+
+def test_access_log_gains_queryable_fields():
+    record = _access_record(200, "/products?location=pantry&category_id=3")
+
+    _AccessLogFilter().filter(record)
+
+    assert record.http_status == 200
+    assert record.http_method == "GET"
+    # Query string dropped so grouping by endpoint is not fragmented.
+    assert record.http_path == "/products"
+
+
+def test_access_filter_leaves_unfamiliar_records_alone():
+    """Guard against mangling records if uvicorn changes its access log shape."""
+    record = logging.LogRecord(
+        name="uvicorn.access", level=logging.INFO, pathname=__file__, lineno=1,
+        msg="something else entirely", args=(), exc_info=None,
+    )
+
+    _AccessLogFilter().filter(record)
+
+    assert record.levelname == "INFO"
+    assert not hasattr(record, "http_status")
+
+
+def test_uvicorn_and_alembic_loggers_route_through_our_handlers():
+    """Half the output used to leave as plain text because these had their own."""
+    for name in ("uvicorn", "uvicorn.access", "alembic"):
+        logging.getLogger(name).addHandler(logging.StreamHandler())
+
+    configure_framework_loggers()
+
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "alembic"):
+        logger = logging.getLogger(name)
+        assert logger.handlers == [], f"{name} still has its own handler"
+        assert logger.propagate is True, f"{name} does not propagate"
+
+
+def test_the_ansi_copy_uvicorn_attaches_is_dropped():
+    """uvicorn passes color_message with escape codes; it is noise in a log store."""
+    formatter = _JsonFormatter(fmt="%(message)s")
+    record = logging.LogRecord(
+        name="uvicorn.error", level=logging.INFO, pathname=__file__, lineno=1,
+        msg="Started server process [1]", args=(), exc_info=None,
+    )
+    record.color_message = "Started server process [\x1b[36m%d\x1b[0m]"
+
+    assert "color_message" not in json.loads(formatter.format(record))
