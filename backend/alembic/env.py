@@ -8,7 +8,6 @@ shared apollo-server-db instance.
 import logging
 import os
 import sys
-from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool, text
 
@@ -19,17 +18,23 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
+from app.logging_config import setup_logging  # noqa: E402
 from app.models import *  # noqa: E402,F401,F403  — registers models on Base.metadata
 
 # Alembic Config object, providing access to values from alembic.ini
 alembic_config = context.config
 
-# Interpret the config file for Python logging only when running from the
-# Alembic CLI (i.e., logging has not been set up yet by the service).
-# When invoked programmatically the root logger already has handlers, so we
-# skip fileConfig to avoid clobbering the service's structured logging.
-if alembic_config.config_file_name is not None and not logging.root.handlers:
-    fileConfig(alembic_config.config_file_name)
+# Configure the service's JSON logging before Alembic would install its own.
+# Running `alembic upgrade head` from the CLI previously fell through to
+# fileConfig and emitted plain text, so migrations — the lines that matter most
+# when a deploy goes wrong — were the least queryable output the service
+# produced.
+if not logging.root.handlers:
+    setup_logging(
+        timezone=settings.timezone,
+        log_file=settings.log_file or None,
+        level=settings.log_level,
+    )
 
 # Models declare their schema via Base.metadata, so autogenerate can diff them.
 target_metadata = Base.metadata

@@ -68,9 +68,64 @@ class _JsonFormatter(_JsonFormatterBase):
         log_record["logger"] = record.name
         log_record["service"] = SERVICE_NAME
 
-        # Remove redundant / noisy fields added by the base formatter
-        for key in ("asctime", "name", "levelname"):
+        # Remove redundant / noisy fields. asctime/name/levelname duplicate the
+        # canonical ones above; color_message is uvicorn's ANSI-escaped copy of
+        # the same text, which is unreadable in a log store.
+        for key in ("asctime", "name", "levelname", "color_message"):
             log_record.pop(key, None)
+
+
+class _AccessLogFilter(logging.Filter):
+    """Give uvicorn's access lines a real severity and queryable fields.
+
+    Uvicorn logs every request at INFO, so a 500 is indistinguishable from a
+    200 when filtering by level — which is precisely what you reach for during
+    an incident. The status code is in the record's args:
+
+        '%s - "%s %s HTTP/%s" %d' % (client, method, path, version, status)
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if not isinstance(args, tuple) or len(args) != 5:
+            # Not the access record shape we know; leave it untouched rather
+            # than guessing.
+            return True
+
+        client_addr, method, path, _http_version, status = args
+        if not isinstance(status, int):
+            return True
+
+        if status >= 500:
+            record.levelno, record.levelname = logging.ERROR, "ERROR"
+        elif status >= 400:
+            record.levelno, record.levelname = logging.WARNING, "WARNING"
+
+        record.http_status = status
+        record.http_method = method
+        # Query string dropped: it is already in the message, and as a separate
+        # field it would fragment grouping by endpoint.
+        record.http_path = str(path).split("?", 1)[0]
+        record.http_client = client_addr
+        return True
+
+
+def configure_framework_loggers() -> None:
+    """Make uvicorn's and alembic's loggers use our handlers.
+
+    Both ship their own handlers and formatters, which is how roughly half of
+    this service's output — every request line, startup message and migration —
+    used to leave as plain text while the application's own lines were JSON.
+
+    Clearing their handlers and letting them propagate puts everything through
+    the root handler configured above, so one format covers the whole stream.
+    """
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "alembic", "alembic.runtime.migration"):
+        logger = logging.getLogger(name)
+        logger.handlers.clear()
+        logger.propagate = True
+
+    logging.getLogger("uvicorn.access").addFilter(_AccessLogFilter())
 
 
 def setup_logging(timezone: str = "UTC", log_file: str | None = None, level: str = "INFO") -> None:
@@ -119,3 +174,5 @@ def setup_logging(timezone: str = "UTC", log_file: str | None = None, level: str
     if not root.handlers:
         for handler in handlers:
             root.addHandler(handler)
+
+    configure_framework_loggers()

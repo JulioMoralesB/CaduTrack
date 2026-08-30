@@ -7,18 +7,16 @@ if [ -d /mnt/logs ]; then
     chown -R appuser:appuser /mnt/logs
 fi
 
-echo "Ensuring the database exists…"
+# Each step logs its own progress as JSON. Plain `echo` announcements were
+# removed deliberately: they were the last non-JSON lines in the stream, and a
+# stream that is "JSON except for a few lines" needs a parser for the
+# exceptions.
 gosu appuser python -m app.db.bootstrap
 
-echo "Applying database migrations…"
 gosu appuser alembic upgrade head
 
 # Idempotent by design: inserts only the default categories that are missing,
 # so running it on every start costs one query and changes nothing.
-echo "Seeding default categories…"
 gosu appuser python -m app.seed
 
-echo "Starting CaduTrack API on ${API_HOST:-0.0.0.0}:${API_PORT:-8001}…"
-exec gosu appuser uvicorn app.main:app \
-    --host "${API_HOST:-0.0.0.0}" \
-    --port "${API_PORT:-8001}"
+exec gosu appuser python -m app
