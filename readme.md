@@ -133,15 +133,24 @@ cp .env.example .env
 # Edit .env with your database URL, Telegram bot token, etc.
 ```
 
-Run migrations and seed the default categories:
+Create the database, run migrations and seed the default categories:
 
 ```bash
+python -m app.db.bootstrap   # creates the database if it does not exist
 alembic upgrade head
 python -m app.seed
 ```
 
-The seed is idempotent — re-running it inserts only categories that are missing,
-so it is safe to run on every deploy.
+All three are idempotent and run automatically on container start, so this is
+only needed when running the API directly on the host.
+
+> **Running the tests wipes the database they point at.** The integration tests
+> `TRUNCATE` products and categories, so they refuse to run unless `DB_NAME`
+> ends in `_test`:
+>
+> ```bash
+> DB_NAME=cadutrack_test pytest
+> ```
 
 Start the server:
 

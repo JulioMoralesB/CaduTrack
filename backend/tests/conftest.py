@@ -1,5 +1,7 @@
 """Shared pytest fixtures."""
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,7 +26,22 @@ def db_session():
     from sqlalchemy import text
     from sqlalchemy.exc import SQLAlchemyError
 
+    from app.config import settings
     from app.db.session import SessionLocal, check_connection
+
+    # This fixture TRUNCATEs. Pointing it at a real database — a developer's
+    # own instance, or worse the server's — destroys data, and nothing in the
+    # command makes that obvious. Refuse loudly unless the target is clearly
+    # disposable.
+    if not settings.db_name.endswith("_test") and os.getenv("PYTEST_ALLOW_DESTRUCTIVE") != "1":
+        pytest.fail(
+            f"Refusing to TRUNCATE {settings.db_name!r}: integration tests wipe the "
+            "products and categories tables.\n"
+            "Point DB_NAME at a disposable database whose name ends in '_test' "
+            "(the API creates it on first start), or set PYTEST_ALLOW_DESTRUCTIVE=1 "
+            "if you really mean this one.",
+            pytrace=False,
+        )
 
     if not check_connection():
         pytest.skip("no reachable database")
