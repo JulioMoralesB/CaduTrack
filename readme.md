@@ -173,7 +173,20 @@ npm run dev
 
 ## Environment Variables
 
-See [`backend/.env.example`](backend/.env.example) for the full documented list.
+There are two `.env.example` files, and they are not interchangeable:
+
+| File | Use it for |
+|------|------------|
+| [`.env.example`](.env.example) (repo root) | **Deploying** with `compose.yaml` — Dockge or `docker compose up -d` |
+| [`backend/.env.example`](backend/.env.example) | Running the API **directly on your machine**, without Docker |
+
+The root file omits `DB_HOST` on purpose: `compose.yaml` points the container at
+`apollo-server-db` over the shared network. The backend file sets it to
+`localhost`, which is correct on your machine and wrong inside a container — so
+do not copy that one to the root.
+
+See [`backend/.env.example`](backend/.env.example) for the full documented list
+of settings; every one of them is valid in either file.
 
 | Variable              | Description                                        |
 |-----------------------|----------------------------------------------------|
