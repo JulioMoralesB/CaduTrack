@@ -1,0 +1,47 @@
+services:
+  cadutrack:
+    # Pre-built image from GitHub Container Registry.
+    # To use it: docker compose pull && docker compose up -d
+    # Pin to a specific version for reproducible deployments:
+    # image: ghcr.io/juliomoralesb/cadutrack:0.1.0
+    image: ghcr.io/juliomoralesb/cadutrack:latest
+    # Build from source (local development / integration tests):
+    # docker compose up -d --build
+    # build:
+    #   context: ./frontend
+    container_name: cadutrack
+    ports:
+      - "${FRONTEND_PORT:-9903}:80"
+    restart: unless-stopped
+    depends_on:
+      - cadutrack-api
+    networks:
+      - apollo-server-network
+
+  cadutrack-api:
+    # Pin to a specific version for reproducible deployments:
+    # image: ghcr.io/juliomoralesb/cadutrack-api:0.1.0
+    image: ghcr.io/juliomoralesb/cadutrack-api:latest
+    # build:
+    #   context: ./backend
+    container_name: cadutrack-api
+    # No published port: only the frontend's nginx talks to the API, over the
+    # shared network. Nothing on the host can reach it directly.
+    env_file:
+      - .env
+    environment:
+      # Reach the shared PostgreSQL by container name on apollo-server-network,
+      # so the host port mapping is irrelevant here.
+      DB_HOST: ${DB_HOST:-apollo-server-db}
+      DB_PORT: ${DB_PORT:-5432}
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ${LOGS_PATH:-./logs}
+        target: /mnt/logs
+    networks:
+      - apollo-server-network
+
+networks:
+  apollo-server-network:
+    external: true
