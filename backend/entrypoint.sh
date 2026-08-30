@@ -7,6 +7,9 @@ if [ -d /mnt/logs ]; then
     chown -R appuser:appuser /mnt/logs
 fi
 
+echo "Ensuring the database exists…"
+gosu appuser python -m app.db.bootstrap
+
 echo "Applying database migrations…"
 gosu appuser alembic upgrade head
 
