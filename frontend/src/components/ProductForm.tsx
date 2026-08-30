@@ -1,15 +1,16 @@
 import { useMemo, useState, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
-import { useCategories } from '@/hooks/useCategories'
 import { LOCATION_LABELS } from '@/labels'
 import { toErrorMessage } from '@/services/api'
 import { createProduct, replaceProduct } from '@/services/productsService'
-import type { Location, Product, ProductPayload } from '@/services/types'
+import type { Category, Location, Product, ProductPayload } from '@/services/types'
 
 interface ProductFormProps {
   /** Omit to create; pass a product to edit it. */
   product?: Product
+  /** Passed in rather than fetched here, so opening the form costs no request. */
+  categories: Category[]
   onSaved: () => void
   onCancel: () => void
 }
@@ -41,8 +42,7 @@ function initialState(product?: Product): FormState {
 }
 
 /** Create or edit a product. The same form serves both. */
-export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
-  const categories = useCategories()
+export function ProductForm({ product, categories, onSaved, onCancel }: ProductFormProps) {
   const [form, setForm] = useState<FormState>(() => initialState(product))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

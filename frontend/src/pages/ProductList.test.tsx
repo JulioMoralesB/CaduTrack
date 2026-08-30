@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductList } from '@/pages/ProductList'
@@ -56,10 +56,12 @@ describe('ProductList', () => {
 
     render(<ProductList />)
 
-    expect(await screen.findByText('Leche entera')).toBeInTheDocument()
-    expect(screen.getByText('2 litros')).toBeInTheDocument()
-    expect(screen.getByText('Refrigerador')).toBeInTheDocument()
-    expect(screen.getByText('Caduca en 5 días')).toBeInTheDocument()
+    // Scoped to the list: the filter bar also renders "Refrigerador", as an option.
+    const list = within(await screen.findByRole('list'))
+    expect(list.getByText('Leche entera')).toBeInTheDocument()
+    expect(list.getByText('2 litros')).toBeInTheDocument()
+    expect(list.getByText('Refrigerador')).toBeInTheDocument()
+    expect(list.getByText('Caduca en 5 días')).toBeInTheDocument()
   })
 
   it('keeps the order the API returned rather than re-sorting', async () => {
@@ -199,14 +201,16 @@ describe('editing a product', () => {
     render(<ProductList />)
     fireEvent.click(await screen.findByRole('button', { name: 'Editar Yogur griego' }))
 
-    expect(screen.getByLabelText('Nombre')).toHaveValue('Yogur griego')
+    // Scoped to the dialog: the filter bar behind it also has a "Categoría" control.
+    const form = within(screen.getByRole('dialog'))
+    expect(form.getByLabelText('Nombre')).toHaveValue('Yogur griego')
     // "4.00" from the API must not show up as-is in a number field.
-    expect(screen.getByLabelText('Cantidad')).toHaveValue(4)
-    expect(screen.getByLabelText('Notas')).toHaveValue('abierto')
-    expect(screen.getByLabelText('Categoría')).toHaveValue('3')
+    expect(form.getByLabelText('Cantidad')).toHaveValue(4)
+    expect(form.getByLabelText('Notas')).toHaveValue('abierto')
+    expect(form.getByLabelText('Categoría')).toHaveValue('3')
 
-    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Yogur natural' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    fireEvent.change(form.getByLabelText('Nombre'), { target: { value: 'Yogur natural' } })
+    fireEvent.click(form.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(mockedReplace).toHaveBeenCalledTimes(1))
     expect(mockedReplace).toHaveBeenCalledWith(7, expect.objectContaining({ name: 'Yogur natural' }))
@@ -253,5 +257,94 @@ describe('the overlay', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+
+describe('filtering and sorting', () => {
+  const pantry = [
+    product({ id: 1, name: 'Yogur', location: 'fridge', status: 'expired', days_until_expiry: -2 }),
+    product({ id: 2, name: 'Arroz', location: 'pantry', status: 'fresh', days_until_expiry: 90 }),
+    product({ id: 3, name: 'Guisantes', location: 'freezer', status: 'fresh', days_until_expiry: 120 }),
+  ]
+
+  it('narrows the list by location', async () => {
+    mockedList.mockResolvedValue(pantry)
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'pantry' } })
+
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Arroz'])
+  })
+
+  it('narrows the list by status', async () => {
+    mockedList.mockResolvedValue(pantry)
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'expired' } })
+
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Yogur'])
+  })
+
+  it('combines filters instead of replacing them', async () => {
+    mockedList.mockResolvedValue(pantry)
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'fresh' } })
+    fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'freezer' } })
+
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Guisantes'])
+  })
+
+  it('reorders by name without refetching', async () => {
+    mockedList.mockResolvedValue(pantry)
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    fireEvent.change(screen.getByLabelText('Ordenar por'), { target: { value: 'name' } })
+
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Arroz',
+      'Guisantes',
+      'Yogur',
+    ])
+    // Filtering and sorting are local; the API is called once, on mount.
+    expect(mockedList).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows how many matched and restores everything on clear', async () => {
+    mockedList.mockResolvedValue(pantry)
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+    // No count while nothing is filtered.
+    expect(screen.queryByText('1 de 3')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'pantry' } })
+    expect(screen.getByText('1 de 3')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar filtros' }))
+
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3)
+  })
+
+  it('distinguishes "no matches" from an empty pantry', async () => {
+    mockedList.mockResolvedValue(pantry)
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'expiring_soon' } })
+
+    expect(screen.getByText('Ningún producto coincide con los filtros.')).toBeInTheDocument()
+    // Telling someone with a full pantry to "add their first purchase" is wrong.
+    expect(screen.queryByText('Todavía no hay nada registrado.')).not.toBeInTheDocument()
   })
 })
