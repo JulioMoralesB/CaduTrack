@@ -26,6 +26,22 @@ A food expiry tracker app to register purchased food items, their expiration dat
 
 ---
 
+## Where this runs
+
+CaduTrack is deployed on a home server whose architecture — the shared PostgreSQL
+instance, the Docker network, how logs are collected, how services are exposed —
+is documented in one place:
+
+**[server-documentation.apollox10.com](https://server-documentation.apollox10.com)**
+
+Read it before changing anything infrastructure-shaped: logging, deployment,
+networking or the database. Those decisions live there, not here, and this
+repository does not find out when one of them changes. It has already happened:
+the logging setup in this repo was built around a collector that had been retired
+weeks earlier, because the repo still described it.
+
+---
+
 ## Repository Structure
 
 ```

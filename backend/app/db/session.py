@@ -50,7 +50,8 @@ def check_connection() -> bool:
         return True
     except SQLAlchemyError as exc:
         # /health is polled continuously, so log a one-line reason rather than a
-        # full traceback — otherwise every probe floods Loki while the DB is down.
+        # full traceback — otherwise every probe floods the log store while the
+        # database is down.
         logger.error("Database health check failed: %s", exc.__class__.__name__)
         logger.debug("Database health check traceback", exc_info=exc)
         return False

@@ -20,7 +20,7 @@ from app.logging_config import setup_logging
 from app.models import Category
 
 # Explicit rather than __name__: running this as `python -m app.seed` would
-# otherwise label every line "__main__" in Loki.
+# otherwise label every line "__main__" in the logs.
 logger = logging.getLogger("app.seed")
 
 # Spanish, because these are user-facing labels the user edits directly.

@@ -35,10 +35,8 @@ services:
       DB_HOST: ${DB_HOST:-apollo-server-db}
       DB_PORT: ${DB_PORT:-5432}
     restart: unless-stopped
-    volumes:
-      - type: bind
-        source: ${LOGS_PATH:-./logs}
-        target: /mnt/logs
+    # No log volume: the container writes only to stdout, which the host's log
+    # pipeline collects. See https://server-documentation.apollox10.com
     networks:
       - apollo-server-network
 

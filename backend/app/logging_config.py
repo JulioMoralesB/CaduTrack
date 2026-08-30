@@ -1,25 +1,30 @@
 """
 Structured JSON logging configuration for CaduTrack.
 
-Mirrors the format used by the other apollo-server services (free-games-notifier,
-apollo-server-dashboard) so a single Promtail pipeline can parse all of them.
+Every entry is a single-line JSON object with consistent fields:
+  - timestamp : ISO 8601 with timezone offset (e.g. "2026-04-28T10:00:00-06:00")
+  - level     : log level string (INFO, WARNING, ERROR, DEBUG)
+  - logger    : logger name (e.g. "app.routers.products")
+  - message   : the log message
+  - service   : always "cadutrack"
 
-All log entries are emitted as single-line JSON objects with consistent fields:
-  - timestamp  : ISO 8601 with timezone offset (e.g. "2026-04-28T10:00:00-06:00")
-  - level      : log level string (INFO, WARNING, ERROR, DEBUG)
-  - logger     : logger name (e.g. "app.routers.products", "__main__")
-  - message    : the log message
-  - service    : always "cadutrack" — useful as a Loki label
+That shape is a **contract**, not a integration with one particular tool: the
+home server's log pipeline promotes any JSON payload it receives into real,
+queryable fields, with no per-service configuration. Emitting this format is the
+whole of what CaduTrack has to do to be searchable and filterable by severity.
 
-Promtail pipeline_stages example:
-  - json:
-      expressions:
-        level: level
-        message: message
-        service: service
-  - labels:
-      level:
-      service:
+Deliberately not documented here: which collector and which store consume it.
+That has already changed once — this file previously carried a Promtail config
+example for a stack retired nineteen days before the file was written — and
+naming the tool is exactly what goes stale. The current pipeline is described in
+the server documentation, and that is where to look:
+
+    https://server-documentation.apollox10.com
+
+One consequence worth knowing, because it looks like a bug: Python's logging
+writes to stderr by default, so a container runtime that infers severity from
+the stream marks every line, including INFO, as an error. Severity lives in the
+`level` field above, never in the stream.
 """
 
 import logging
