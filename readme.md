@@ -200,15 +200,15 @@ That builds and pushes two multi-arch images:
 
 Each tag publishes both `{version}` and `latest`.
 
-> **This repository is private, so the packages are created private too.**
-> Unlike `free-games-notifier` and `apollo-server-dashboard`, which are public
-> repos with public images, pulling these on the server needs one of:
->
-> - Set each package to **public** once, under its GHCR package settings, or
-> - Authenticate on the server: `docker login ghcr.io -u JulioMoralesB` with a
->   personal access token carrying `read:packages`.
->
-> Without either, `docker compose pull` fails with `unauthorized`.
+Both packages are **public**, inherited from the repository's visibility, so the
+server pulls them anonymously — no `docker login` needed, same as
+`free-games-notifier` and `apollo-server-dashboard`.
+
+> If the repository is ever made private again, existing packages keep their
+> visibility but new ones are created private. In that case either flip each
+> package to public in its GHCR settings, or run
+> `docker login ghcr.io -u JulioMoralesB` on the server with a token carrying
+> `read:packages` — otherwise `docker compose pull` fails with `unauthorized`.
 
 ---
 
