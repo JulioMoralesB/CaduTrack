@@ -6,10 +6,14 @@
   --border: #dfe3db;
   --accent: #3f7d3a;
   --danger: #b03434;
-  /* Neutral until #16 assigns a colour per expiry status. */
-  --status-fresh: var(--border);
-  --status-expiring-soon: var(--border);
-  --status-expired: var(--border);
+  /* Text sitting on an --accent or --danger fill. It flips with the theme:
+     the dark palette lightens those fills, so white text on them is unreadable. */
+  --on-fill: #ffffff;
+  /* Expiry status. These are used for text as well as the card stripe, so they
+     are picked for contrast against --surface, not for maximum saturation. */
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03434;
 
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
@@ -27,6 +31,10 @@
     --border: #333a2d;
     --accent: #8fc98a;
     --danger: #e08585;
+    --on-fill: #14170f;
+    --status-fresh: #7fbf7a;
+    --status-expiring-soon: #e0a33a;
+    --status-expired: #e08585;
   }
 }
 
@@ -75,14 +83,14 @@ button:disabled {
 .button--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   font-weight: 600;
 }
 
 .button--danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--on-fill);
   font-weight: 600;
 }
 

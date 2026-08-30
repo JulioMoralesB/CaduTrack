@@ -38,16 +38,22 @@
   border-radius: 0.625rem;
 }
 
+/* Each status sets one variable; the stripe and the expiry text both read it,
+   so a status can never be half-coloured. */
 .product-card--fresh {
-  border-left-color: var(--status-fresh);
+  --status-color: var(--status-fresh);
 }
 
 .product-card--expiring_soon {
-  border-left-color: var(--status-expiring-soon);
+  --status-color: var(--status-expiring-soon);
 }
 
 .product-card--expired {
-  border-left-color: var(--status-expired);
+  --status-color: var(--status-expired);
+}
+
+.product-card {
+  border-left-color: var(--status-color, var(--border));
 }
 
 .product-card__name {
@@ -75,6 +81,9 @@
 .product-card__expiry {
   font-size: 0.875rem;
   font-weight: 600;
+  /* Colour reinforces the wording, it does not replace it — "Caducó hace 2
+     días" still reads correctly to anyone who cannot distinguish the hues. */
+  color: var(--status-color, var(--text));
 }
 
 .state {
