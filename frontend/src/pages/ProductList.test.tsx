@@ -76,13 +76,17 @@ describe('ProductList', () => {
     expect(names).toEqual(['Yogur', 'Queso', 'Arroz'])
   })
 
-  it('marks each card with its status so the list can be scanned', async () => {
-    mockedList.mockResolvedValue([product({ status: 'expired', days_until_expiry: -2 })])
+  it.each([
+    ['fresh' as const, 90],
+    ['expiring_soon' as const, 3],
+    ['expired' as const, -2],
+  ])('marks a %s card so the list can be scanned by colour', async (status, days) => {
+    mockedList.mockResolvedValue([product({ status, days_until_expiry: days })])
 
     render(<ProductList />)
 
     const card = (await screen.findByText('Leche entera')).closest('li')
-    expect(card).toHaveClass('product-card--expired')
+    expect(card).toHaveClass(`product-card--${status}`)
   })
 
   it('labels a product with no category instead of leaving a gap', async () => {
