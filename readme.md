@@ -181,6 +181,37 @@ See [`backend/.env.example`](backend/.env.example) for the full documented list.
 
 ---
 
+## Releases
+
+Docker images are published to GHCR by `.github/workflows/release.yml`, which
+runs on version tags only:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That builds and pushes two multi-arch images:
+
+| Image | Contents |
+|-------|----------|
+| `ghcr.io/juliomoralesb/cadutrack`     | Frontend — the Vite build served by nginx |
+| `ghcr.io/juliomoralesb/cadutrack-api` | Backend — FastAPI |
+
+Each tag publishes both `{version}` and `latest`.
+
+> **This repository is private, so the packages are created private too.**
+> Unlike `free-games-notifier` and `apollo-server-dashboard`, which are public
+> repos with public images, pulling these on the server needs one of:
+>
+> - Set each package to **public** once, under its GHCR package settings, or
+> - Authenticate on the server: `docker login ghcr.io -u JulioMoralesB` with a
+>   personal access token carrying `read:packages`.
+>
+> Without either, `docker compose pull` fails with `unauthorized`.
+
+---
+
 ## License
 
 MIT
