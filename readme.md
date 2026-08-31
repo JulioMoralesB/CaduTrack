@@ -1,4 +1,4 @@
-# CaduTrack 🥦 [WIP]
+# <img src="frontend/public/icons/icon-192.png" alt="" width="30" align="top"> CaduTrack
 
 A food expiry tracker app to register purchased food items, their expiration dates, and receive alerts before they expire — so nothing goes to waste.
 
