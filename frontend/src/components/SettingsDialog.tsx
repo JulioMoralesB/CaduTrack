@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Modal } from '@/components/Modal'
 import { ThemePicker } from '@/components/ThemePicker'
 import { toErrorMessage } from '@/services/api'
-import { getSettings, saveSettings, triggerAlert } from '@/services/settingsService'
+import { getSettings, saveIconSettings, saveSettings, triggerAlert } from '@/services/settingsService'
 import type { SettingsResponse } from '@/services/types'
 
 interface SettingsDialogProps {
@@ -28,12 +28,16 @@ function formatNextRun(iso: string, timeZone: string): string {
   })
 }
 
-/** Alert preferences, and a way to check delivery actually works. */
+/** Alert preferences, the icon-assignment toggle, and a way to check delivery
+ *  actually works. Two backend resources (see PUT /settings and PUT
+ *  /settings/icons), one screen, one Guardar — the split exists to protect
+ *  each setting from the other's payload, not to make the user click twice. */
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const [current, setCurrent] = useState<SettingsResponse | null>(null)
   const [enabled, setEnabled] = useState(true)
   const [alertTime, setAlertTime] = useState('08:00')
   const [daysAhead, setDaysAhead] = useState('7')
+  const [aiEnabled, setAiEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
@@ -49,6 +53,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
         setEnabled(data.alerts.enabled)
         setAlertTime(data.alerts.alert_time)
         setDaysAhead(String(data.alerts.days_ahead))
+        setAiEnabled(data.icons.ai_enabled)
       } catch (caught) {
         if (active) setError(toErrorMessage(caught))
       }
@@ -66,7 +71,14 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
 
     void (async () => {
       try {
-        await saveSettings({ enabled, alert_time: alertTime, days_ahead: Number(daysAhead) })
+        // Independent resources, saved together because the dialog only
+        // shows one Guardar button — not because the backend expects them
+        // to arrive as one payload. Either can fail without the other having
+        // partially applied, since each is its own request.
+        await Promise.all([
+          saveSettings({ enabled, alert_time: alertTime, days_ahead: Number(daysAhead) }),
+          saveIconSettings({ ai_enabled: aiEnabled }),
+        ])
         // Close on success, as every other app does. The rescheduled next run
         // is still shown on the next open; keeping the dialog up to display it
         // traded the expected behaviour for a confirmation nobody asked for.
@@ -97,7 +109,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   }
 
   return (
-    <Modal title="Ajustes de alertas" onClose={onClose}>
+    <Modal title="Ajustes" onClose={onClose}>
       {current === null && !error && <p className="state state--loading">Cargando…</p>}
 
       <ThemePicker />
@@ -139,6 +151,19 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
               ? `Próxima alerta: ${formatNextRun(current.next_run_at, current.timezone)}`
               : 'No hay ninguna alerta programada.'}
           </p>
+
+          <p className="settings__section-title">Iconos</p>
+
+          <p className={`settings__status settings__status--${current.ollama_configured ? 'ok' : 'missing'}`}>
+            {current.ollama_configured
+              ? 'Modelo de iconos configurado'
+              : 'Modelo de iconos sin configurar — se usará el icono por defecto'}
+          </p>
+
+          <label className="form__field form__field--inline">
+            <input type="checkbox" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
+            <span>Asignar icono con IA cuando la tabla local no reconozca el producto</span>
+          </label>
 
           {error && (
             <p className="form__error" role="alert">

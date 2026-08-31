@@ -143,3 +143,47 @@ def test_next_run_at_reflects_the_scheduler_not_the_setting(api_client, db_sessi
 )
 def test_invalid_settings_are_rejected(api_client, payload):
     assert api_client.put("/settings", json=payload).status_code == 422
+
+
+@pytest.mark.integration
+def test_get_includes_icon_settings_and_ollama_configured(api_client):
+    body = api_client.get("/settings").json()
+
+    assert body["icons"]["ai_enabled"] is True
+    assert body["ollama_configured"] is False
+
+
+@pytest.mark.integration
+def test_get_reports_ollama_configured_when_a_url_is_set(api_client, monkeypatch):
+    monkeypatch.setattr(env_settings, "ollama_url", "http://ollama.example:11434")
+
+    assert api_client.get("/settings").json()["ollama_configured"] is True
+
+
+@pytest.mark.integration
+def test_turning_off_the_icon_toggle_persists(api_client):
+    response = api_client.put("/settings/icons", json={"ai_enabled": False})
+
+    assert response.status_code == 200
+    assert response.json()["icons"]["ai_enabled"] is False
+    assert api_client.get("/settings").json()["icons"]["ai_enabled"] is False
+
+
+@pytest.mark.integration
+def test_the_icon_toggle_never_touches_alert_settings(api_client):
+    api_client.put("/settings", json={"enabled": True, "alert_time": "21:30", "days_ahead": 7})
+
+    api_client.put("/settings/icons", json={"ai_enabled": False})
+
+    alerts = api_client.get("/settings").json()["alerts"]
+    assert alerts["alert_time"] == "21:30"
+    assert alerts["days_ahead"] == 7
+
+
+@pytest.mark.integration
+def test_saving_alert_settings_never_touches_the_icon_toggle(api_client):
+    api_client.put("/settings/icons", json={"ai_enabled": False})
+
+    api_client.put("/settings", json={"enabled": True, "alert_time": "09:00", "days_ahead": 3})
+
+    assert api_client.get("/settings").json()["icons"]["ai_enabled"] is False
