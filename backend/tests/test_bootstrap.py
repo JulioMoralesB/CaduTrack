@@ -7,9 +7,33 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 from app.config import settings
-from app.db.bootstrap import _maintenance_url, ensure_database_exists
+from app.db.bootstrap import DatabaseUnreachableError, _maintenance_url, ensure_database_exists
 
 THROWAWAY = "cadutrack_bootstrap_pytest"
+
+
+class FakeClock:
+    """A clock that advances only when the code under test sleeps.
+
+    The retry budget is measured in elapsed time, so stubbing sleep with a no-op
+    would leave the clock at zero and spin forever. Advancing a fake clock keeps
+    these tests instant while still exercising the real budget arithmetic.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.slept: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def _down() -> bool:
+    raise OperationalError("connection failed", None, Exception())
 
 
 def test_maintenance_url_keeps_the_credentials_and_swaps_the_database():
@@ -77,54 +101,115 @@ def test_a_transient_outage_produces_warnings_and_no_error(monkeypatch, caplog):
     def flaky() -> bool:
         attempts["n"] += 1
         if attempts["n"] < 3:
-            raise OperationalError("connection failed", None, Exception())
+            return _down()
         return True
 
     monkeypatch.setattr(bootstrap, "_database_exists", flaky)
-    monkeypatch.setattr(bootstrap, "RETRY_SECONDS", 0)
+    monkeypatch.setattr(bootstrap, "time", FakeClock())
 
     with caplog.at_level(logging.DEBUG, logger="app.db.bootstrap"):
         assert bootstrap._database_exists_once_reachable() is True
 
     levels = [record.levelname for record in caplog.records]
     assert levels == ["WARNING", "WARNING"]
-    assert "attempt 1/10" in caplog.records[0].getMessage()
+    assert "attempt 1" in caplog.records[0].getMessage()
+    assert "retrying in 1s" in caplog.records[0].getMessage()
+
+
+def test_the_delays_grow_and_then_hold_at_the_cap(monkeypatch):
+    """Growth alone is not enough; the cap is what bounds the overshoot.
+
+    Doubling uncapped would put a single 256-second wait inside a five-minute
+    budget, leaving a database that recovered at second 40 unnoticed until 256.
+    """
+    import app.db.bootstrap as bootstrap
+
+    delays = bootstrap._retry_delays()
+    assert [next(delays) for _ in range(8)] == [1, 2, 4, 8, 16, 30, 30, 30]
+
+
+def test_the_budget_is_spent_in_full_and_never_overrun(monkeypatch):
+    """The last wait is trimmed so the final attempt lands on the deadline."""
+    import app.db.bootstrap as bootstrap
+
+    clock = FakeClock()
+    monkeypatch.setattr(bootstrap, "_database_exists", _down)
+    monkeypatch.setattr(bootstrap, "time", clock)
+
+    with pytest.raises(DatabaseUnreachableError):
+        bootstrap._database_exists_once_reachable()
+
+    assert clock.slept == [1, 2, 4, 8, 16] + [30] * 8 + [29]
+    assert sum(clock.slept) == bootstrap.CONNECT_BUDGET_SECONDS
+
+
+def test_it_reaches_far_enough_for_the_cold_start_that_defeated_the_old_budget(monkeypatch):
+    """The regression under test: the old ~18s reach missed by 260 milliseconds.
+
+    Nothing here asserts 300 seconds specifically — the point is that the budget
+    outlasts a cold start by a wide margin rather than by a coin flip.
+    """
+    import app.db.bootstrap as bootstrap
+
+    clock = FakeClock()
+    ready_at = 60.0
+
+    def up_after_a_cold_start() -> bool:
+        if clock.now < ready_at:
+            return _down()
+        return True
+
+    monkeypatch.setattr(bootstrap, "_database_exists", up_after_a_cold_start)
+    monkeypatch.setattr(bootstrap, "time", clock)
+
+    assert bootstrap._database_exists_once_reachable() is True
+    assert clock.now < bootstrap.CONNECT_BUDGET_SECONDS
 
 
 def test_giving_up_raises_so_the_caller_can_log_one_error(monkeypatch):
     """Exhausting the budget is the only thing that deserves an ERROR."""
     import app.db.bootstrap as bootstrap
 
-    def always_down() -> bool:
-        raise OperationalError("connection failed", None, Exception())
+    monkeypatch.setattr(bootstrap, "_database_exists", _down)
+    monkeypatch.setattr(bootstrap, "time", FakeClock())
 
-    monkeypatch.setattr(bootstrap, "_database_exists", always_down)
-    monkeypatch.setattr(bootstrap, "RETRY_SECONDS", 0)
-
-    with pytest.raises(OperationalError):
+    with pytest.raises(DatabaseUnreachableError) as excinfo:
         bootstrap._database_exists_once_reachable()
 
+    assert excinfo.value.attempts == 15
+    assert excinfo.value.elapsed == 300.0
 
-def test_it_waits_rather_than_letting_the_container_crash_loop(monkeypatch):
-    """Sleeping between attempts is the point.
 
-    Without it the process exits, the entrypoint stops the container, and the
-    restart policy retries — which works, but logs a failure each time.
+def test_the_error_reports_measured_time_rather_than_a_computed_product(monkeypatch, caplog):
+    """`attempts × interval` stopped being the elapsed time when delays varied.
+
+    Fifteen attempts here span 300 seconds, not 15 × any constant, so a line
+    that multiplies would report a number that never happened.
     """
     import app.db.bootstrap as bootstrap
 
-    slept: list[float] = []
-    calls = {"n": 0}
+    monkeypatch.setattr(bootstrap, "_database_exists", _down)
+    monkeypatch.setattr(bootstrap, "time", FakeClock())
+    monkeypatch.setattr(bootstrap, "setup_logging", lambda **kwargs: None)
 
-    def twice_down() -> bool:
-        calls["n"] += 1
-        if calls["n"] < 3:
-            raise OperationalError("connection failed", None, Exception())
-        return True
+    with caplog.at_level(logging.ERROR, logger="app.db.bootstrap"):
+        with pytest.raises(SystemExit):
+            bootstrap.main()
 
-    monkeypatch.setattr(bootstrap, "_database_exists", twice_down)
-    monkeypatch.setattr(bootstrap.time, "sleep", lambda seconds: slept.append(seconds))
+    errors = [record for record in caplog.records if record.levelname == "ERROR"]
+    assert len(errors) == 1
+    assert "15 attempts over 300s" in errors[0].getMessage()
 
-    bootstrap._database_exists_once_reachable()
 
-    assert slept == [bootstrap.RETRY_SECONDS, bootstrap.RETRY_SECONDS]
+def test_main_exits_non_zero_when_the_budget_is_exhausted(monkeypatch):
+    """The restart policy is the outer loop, and it needs a failing exit code."""
+    import app.db.bootstrap as bootstrap
+
+    monkeypatch.setattr(bootstrap, "_database_exists", _down)
+    monkeypatch.setattr(bootstrap, "time", FakeClock())
+    monkeypatch.setattr(bootstrap, "setup_logging", lambda **kwargs: None)
+
+    with pytest.raises(SystemExit) as excinfo:
+        bootstrap.main()
+
+    assert excinfo.value.code == 1

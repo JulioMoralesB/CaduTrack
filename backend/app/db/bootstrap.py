@@ -13,6 +13,7 @@ role viable, since the common path needs no rights beyond the app's own.
 import logging
 import sys
 import time
+from collections.abc import Iterator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -29,8 +30,39 @@ logger = logging.getLogger("app.db.bootstrap")
 # back to try again. That worked, but it turned a five-second wait into four
 # crashed starts, each logging an ERROR that no alert can distinguish from a
 # real failure.
-CONNECT_ATTEMPTS = 10
-RETRY_SECONDS = 2.0
+#
+# The budget is bounded by elapsed time rather than by a count of attempts,
+# because the question it answers is "how long may a cold start take", not "how
+# many times should we ask". Five minutes clears any plausible one: the nightly
+# backup stops Postgres after a full day of writes, so recovery replays WAL
+# while a dozen other containers compete for the same disk. It costs nothing
+# when the database is up — the budget is only spent while it is not — and it
+# still leaves ERROR meaning a database that really is gone, which is the whole
+# point of keeping the level.
+#
+# Delays grow 1, 2, 4, 8, 16 and then hold at 30. The cap earns its place as
+# much as the growth does: doubling uncapped to five minutes would put a single
+# 256-second wait in the middle, so a database that came back at second 40 would
+# go unnoticed until second 256.
+CONNECT_BUDGET_SECONDS = 300.0
+FIRST_RETRY_SECONDS = 1.0
+MAX_RETRY_SECONDS = 30.0
+
+
+class DatabaseUnreachableError(RuntimeError):
+    """The connect budget was spent without the server ever answering.
+
+    Carries the measured attempt count and elapsed time so the caller reports
+    what happened instead of deriving it from the constants. With delays that
+    vary, attempts × interval is not the elapsed time, and a log line that
+    computes one is simply wrong.
+    """
+
+    def __init__(self, attempts: int, elapsed: float, last_error: Exception) -> None:
+        super().__init__(f"Database unreachable after {attempts} attempts over {elapsed:.0f}s")
+        self.attempts = attempts
+        self.elapsed = elapsed
+        self.last_error = last_error
 
 
 def _database_exists() -> bool:
@@ -53,6 +85,14 @@ def _database_exists() -> bool:
         engine.dispose()
 
 
+def _retry_delays() -> Iterator[float]:
+    """The wait before each retry: 1, 2, 4, 8, 16, 30, 30, … seconds."""
+    delay = FIRST_RETRY_SECONDS
+    while True:
+        yield delay
+        delay = min(delay * 2, MAX_RETRY_SECONDS)
+
+
 def _database_exists_once_reachable() -> bool:
     """Wait for the database server, then report whether our database is there.
 
@@ -60,24 +100,31 @@ def _database_exists_once_reachable() -> bool:
     are not failures. Only exhausting the budget is an error, and the caller
     logs exactly one line for it.
     """
-    last_error: OperationalError | None = None
+    started = time.monotonic()
+    delays = _retry_delays()
+    attempt = 0
 
-    for attempt in range(1, CONNECT_ATTEMPTS + 1):
+    while True:
+        attempt += 1
         try:
             return _database_exists()
         except OperationalError as exc:
-            last_error = exc
-            if attempt < CONNECT_ATTEMPTS:
-                logger.warning(
-                    "Database server not reachable yet (attempt %d/%d), retrying in %.0fs",
-                    attempt,
-                    CONNECT_ATTEMPTS,
-                    RETRY_SECONDS,
-                )
-                time.sleep(RETRY_SECONDS)
+            elapsed = time.monotonic() - started
+            remaining = CONNECT_BUDGET_SECONDS - elapsed
+            if remaining <= 0:
+                raise DatabaseUnreachableError(attempt, elapsed, exc) from exc
 
-    assert last_error is not None
-    raise last_error
+            # Never sleep past the budget: trimming the last wait puts the final
+            # attempt on the deadline rather than beyond it.
+            delay = min(next(delays), remaining)
+            logger.warning(
+                "Database server not reachable yet (attempt %d, %.0fs of %.0fs), retrying in %.0fs",
+                attempt,
+                elapsed,
+                CONNECT_BUDGET_SECONDS,
+                delay,
+            )
+            time.sleep(delay)
 
 
 def _maintenance_url() -> str:
@@ -130,15 +177,21 @@ def main() -> None:
     )
     try:
         ensure_database_exists()
-    except OperationalError as exc:
+    except DatabaseUnreachableError as exc:
         # The one ERROR this module may emit: the wait was exhausted and the
-        # service genuinely cannot start.
+        # service genuinely cannot start. Both numbers are measured.
         logger.error(
             "Database server unreachable after %d attempts over %.0fs: %s",
-            CONNECT_ATTEMPTS,
-            CONNECT_ATTEMPTS * RETRY_SECONDS,
-            exc.__class__.__name__,
+            exc.attempts,
+            exc.elapsed,
+            exc.last_error.__class__.__name__,
         )
+        sys.exit(1)
+    except OperationalError as exc:
+        # Only reachable from the CREATE DATABASE path, which runs after the
+        # server has already answered once. Worded so it cannot be read as the
+        # server being down, because it is not.
+        logger.error("Database bootstrap could not connect: %s", exc.__class__.__name__)
         sys.exit(1)
 
 
