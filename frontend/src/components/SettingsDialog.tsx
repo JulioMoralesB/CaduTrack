@@ -9,14 +9,21 @@ interface SettingsDialogProps {
   onClose: () => void
 }
 
-/** Format the server's ISO timestamp as something readable in Spanish. */
-function formatNextRun(iso: string): string {
+/**
+ * Format the server's ISO timestamp as something readable in Spanish.
+ *
+ * Rendered in the server's zone, not the viewer's: the time field above means
+ * server time, so converting this one to the device's zone would put two
+ * different hours on the same screen for the same event.
+ */
+function formatNextRun(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleString('es-MX', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   })
 }
 
@@ -123,7 +130,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
 
           <p className="settings__hint">
             {current.next_run_at
-              ? `Próxima alerta: ${formatNextRun(current.next_run_at)}`
+              ? `Próxima alerta: ${formatNextRun(current.next_run_at, current.timezone)}`
               : 'No hay ninguna alerta programada.'}
           </p>
 

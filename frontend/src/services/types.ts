@@ -56,6 +56,8 @@ export interface SettingsResponse {
   telegram_configured: boolean
   /** ISO timestamp, or null when nothing is scheduled. */
   next_run_at: string | null
+  /** IANA zone the alert time is expressed in. */
+  timezone: string
 }
 
 export type AlertSettingsPayload = Pick<AlertSettings, 'enabled' | 'alert_time' | 'days_ahead'>

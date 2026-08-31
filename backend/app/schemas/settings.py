@@ -36,3 +36,7 @@ class SettingsResponse(BaseModel):
     # What the scheduler will actually do, which can differ from what the
     # settings say if Telegram is unconfigured.
     next_run_at: str | None
+    # The zone alert_time is expressed in. Sent so the UI can render the next
+    # run in the same zone as the input, instead of converting to whatever zone
+    # the viewer's device happens to be in.
+    timezone: str

@@ -52,6 +52,7 @@ def test_get_reports_settings_without_ever_exposing_the_token(api_client, monkey
     body = api_client.get("/settings").json()
 
     assert body["telegram_configured"] is True
+    assert body["timezone"]
     assert "super-secret-token" not in str(body)
     assert "token" not in body["alerts"]
 

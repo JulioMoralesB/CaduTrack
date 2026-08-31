@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.config import settings as env_settings
 from app.db.session import get_db
 from app.scheduler import apply_settings, next_run_time
 from app.schemas.settings import AlertSettingsRead, AlertSettingsUpdate, SettingsResponse
@@ -21,6 +22,7 @@ def _response(stored) -> SettingsResponse:
         alerts=AlertSettingsRead.model_validate(stored),
         telegram_configured=is_configured(),
         next_run_at=next_run_time(),
+        timezone=env_settings.timezone,
     )
 
 

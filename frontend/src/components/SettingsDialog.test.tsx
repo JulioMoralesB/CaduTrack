@@ -20,6 +20,8 @@ function response(overrides: Partial<SettingsResponse> = {}): SettingsResponse {
     alerts: { enabled: true, alert_time: '08:00', days_ahead: 7, updated_at: '2026-08-30T00:00:00Z' },
     telegram_configured: true,
     next_run_at: '2026-08-31T08:00:00-06:00',
+    // Pinned so the rendered time does not depend on the runner's zone.
+    timezone: 'America/Mexico_City',
     ...overrides,
   }
 }
