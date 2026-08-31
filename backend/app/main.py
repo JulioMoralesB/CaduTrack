@@ -1,4 +1,6 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.logging_config import setup_logging
 from app.routers import alerts, categories, health, products
+from app.scheduler import shutdown_scheduler, start_scheduler
 
 # Configure structured logging before anything else emits a record.
 setup_logging(
@@ -16,7 +19,18 @@ setup_logging(
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="CaduTrack", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Run the daily alert job for as long as the API is up."""
+    start_scheduler()
+    try:
+        yield
+    finally:
+        shutdown_scheduler()
+
+
+app = FastAPI(title="CaduTrack", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
