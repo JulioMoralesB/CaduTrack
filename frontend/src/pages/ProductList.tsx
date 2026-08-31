@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ProductCard } from '@/components/ProductCard'
 import { ProductFilters } from '@/components/ProductFilters'
 import { ProductForm } from '@/components/ProductForm'
+import { StaleBanner } from '@/components/StaleBanner'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import {
   NO_FILTERS,
@@ -29,7 +30,7 @@ type Dialog =
 
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
-  const { products, loading, error, reload } = useProducts()
+  const { products, loading, error, cachedAt, reload } = useProducts()
   const categories = useCategories()
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' })
   const [deleting, setDeleting] = useState(false)
@@ -82,6 +83,8 @@ export function ProductList() {
           Agregar producto
         </button>
       </div>
+
+      {cachedAt && <StaleBanner cachedAt={cachedAt} />}
 
       {loading && <p className="state state--loading">Cargando…</p>}
 

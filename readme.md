@@ -8,8 +8,10 @@ A food expiry tracker app to register purchased food items, their expiration dat
 
 - 📦 Register food items with name, category, quantity, unit, and storage location
 - 📅 Track expiration dates with automatic status calculation (fresh / expiring soon / expired)
-- 🔔 Alerts before items expire
-- 📱 Progressive Web App (PWA) — installable on mobile devices
+- 🔔 A daily Telegram digest of what has expired or is about to, grouped by
+  storage location — time, days ahead and on/off edited from the app itself
+- 📱 Installable on a phone as a Progressive Web App, with the product list
+  readable offline — clearly labelled with how old the cached copy is
 - 🗂️ Filter by storage location: fridge, freezer, or pantry
 
 ---
@@ -22,6 +24,7 @@ A food expiry tracker app to register purchased food items, their expiration dat
 | Backend    | FastAPI + SQLAlchemy + PostgreSQL       |
 | Migrations | Alembic (schema-per-service)            |
 | Alerts     | APScheduler + Telegram Bot API          |
+| PWA        | vite-plugin-pwa + Workbox               |
 | Hosting    | Home server via Cloudflare Tunnel       |
 
 ---
@@ -184,6 +187,29 @@ cd frontend
 npm install
 npm run dev
 ```
+
+The service worker is only built for production, so `npm run dev` has no offline
+behaviour. To exercise it:
+
+```bash
+npm run build && npm run preview
+```
+
+`preview` proxies `/api` to the backend the same way the dev server does.
+
+### App icons
+
+`public/favicon.svg` is the source. The PNGs the manifest and iOS need are
+generated from it and committed:
+
+```bash
+cd frontend
+node scripts/generate-icons.mjs
+```
+
+Run that after changing the logo. It is not part of the build — the icons change
+only when the logo does, and a build step would put `sharp` on the deploy path
+for nothing.
 
 ---
 

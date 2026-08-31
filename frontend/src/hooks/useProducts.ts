@@ -8,6 +8,8 @@ interface UseProductsResult {
   products: Product[]
   loading: boolean
   error: string | null
+  /** Set when the list came from the offline cache rather than the network. */
+  cachedAt: Date | null
   reload: () => void
 }
 
@@ -25,6 +27,7 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cachedAt, setCachedAt] = useState<Date | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
 
   // Depend on the serialized filters: a fresh object literal on every render
@@ -36,9 +39,10 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
 
     void (async () => {
       try {
-        const data = await listProducts(JSON.parse(filterKey) as ProductFilters)
+        const result = await listProducts(JSON.parse(filterKey) as ProductFilters)
         if (active) {
-          setProducts(data)
+          setProducts(result.products)
+          setCachedAt(result.cachedAt)
           setError(null)
         }
       } catch (caught) {
@@ -62,5 +66,26 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     setReloadNonce((nonce) => nonce + 1)
   }, [])
 
-  return { products, loading, error, reload }
+  // Escaping a stale list should not need a manual reload.
+  //
+  // Two triggers, because neither is sufficient. The `online` event misses the
+  // common cases: a device that believes it is connected behind a broken
+  // network, and DevTools' offline simulation, which does not dispatch it at
+  // all. Returning to the tab is the trigger that actually fires in the real
+  // path — phone into pocket, phone out of pocket, in front of the fridge.
+  useEffect(() => {
+    const refresh = () => setReloadNonce((nonce) => nonce + 1)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+
+    window.addEventListener('online', refresh)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('online', refresh)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+
+  return { products, loading, error, cachedAt, reload }
 }
