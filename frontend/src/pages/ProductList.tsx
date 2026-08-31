@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ProductCard } from '@/components/ProductCard'
 import { ProductFilters } from '@/components/ProductFilters'
 import { ProductForm } from '@/components/ProductForm'
+import { SettingsDialog } from '@/components/SettingsDialog'
 import {
   NO_FILTERS,
   applyFilters,
@@ -24,6 +25,7 @@ type Dialog =
   | { kind: 'create' }
   | { kind: 'edit'; product: Product }
   | { kind: 'delete'; product: Product }
+  | { kind: 'settings' }
 
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
@@ -69,6 +71,9 @@ export function ProductList() {
   return (
     <>
       <div className="list-header">
+        <button type="button" onClick={() => setDialog({ kind: 'settings' })}>
+          Ajustes
+        </button>
         <button
           type="button"
           className="button--primary"
@@ -148,6 +153,8 @@ export function ProductList() {
           onCancel={close}
         />
       )}
+
+      {dialog.kind === 'settings' && <SettingsDialog onClose={close} />}
 
       {dialog.kind === 'delete' && (
         <ConfirmDialog

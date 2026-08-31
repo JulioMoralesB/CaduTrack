@@ -126,6 +126,7 @@
 .list-header {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding-bottom: 0.875rem;
 }
 
@@ -290,4 +291,44 @@
   .filters__controls {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* Settings */
+
+.settings__status {
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.settings__status--ok {
+  color: var(--status-fresh);
+  border: 1px solid var(--status-fresh);
+}
+
+.settings__status--missing {
+  color: var(--status-expired);
+  border: 1px solid var(--status-expired);
+}
+
+.settings__hint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.form__field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form__field--inline input {
+  width: auto;
+}
+
+.form__field--inline > span {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text);
 }

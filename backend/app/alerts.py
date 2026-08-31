@@ -11,10 +11,10 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.config import settings
 from app.expiry import expiry_status, today
 from app.labels import LOCATION_LABELS, expiry_phrase
 from app.models import Product
+from app.settings_store import read_only
 from app.telegram import escape, send_message
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,9 @@ def products_needing_attention(
     on, and the action — eat it or bin it and delete the row — is the same one
     that stops them reappearing tomorrow.
     """
-    horizon = (reference or today()) + timedelta(days=days_ahead or settings.alert_days_ahead)
+    if days_ahead is None:
+        _enabled, _alert_time, days_ahead = read_only(session)
+    horizon = (reference or today()) + timedelta(days=days_ahead)
 
     statement = (
         select(Product)
@@ -83,10 +85,11 @@ def send_expiry_alert(session: Session, reference: date | None = None) -> int:
     trains you to ignore the channel, and then the one that matters is ignored
     too.
     """
-    products = products_needing_attention(session, reference=reference)
+    _enabled, _alert_time, days_ahead = read_only(session)
+    products = products_needing_attention(session, days_ahead=days_ahead, reference=reference)
 
     if not products:
-        logger.info("Nothing expiring within %s days, no alert sent", settings.alert_days_ahead)
+        logger.info("Nothing expiring within %s days, no alert sent", days_ahead)
         return 0
 
     send_message(format_alert(products, reference=reference))

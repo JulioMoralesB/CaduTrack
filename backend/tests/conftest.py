@@ -47,7 +47,7 @@ def db_session():
         pytest.skip("no reachable database")
 
     session = SessionLocal()
-    session.execute(text("TRUNCATE products, categories RESTART IDENTITY CASCADE"))
+    session.execute(text("TRUNCATE products, categories, alert_settings RESTART IDENTITY CASCADE"))
     session.commit()
     try:
         yield session

@@ -6,5 +6,6 @@ Base.metadata before autogenerate runs.
 
 from app.models.category import Category
 from app.models.product import Location, Product
+from app.models.setting import AlertSettings
 
-__all__ = ["Category", "Location", "Product"]
+__all__ = ["AlertSettings", "Category", "Location", "Product"]
