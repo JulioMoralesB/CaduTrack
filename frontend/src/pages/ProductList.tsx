@@ -158,7 +158,7 @@ export function ProductList() {
         />
       )}
 
-      {dialog.kind === 'settings' && <SettingsDialog onClose={close} />}
+      {dialog.kind === 'settings' && <SettingsDialog onClose={close} onIconsReassigned={reload} />}
 
       {dialog.kind === 'delete' && (
         <ConfirmDialog

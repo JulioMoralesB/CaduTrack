@@ -1,5 +1,6 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 
+import { IconPicker } from '@/components/IconPicker'
 import { LOCATION_LABELS, expiryPhrase, quantityLabel } from '@/labels'
 import { canStepDown } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
@@ -21,7 +22,6 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged }: Pro
   const [quantityError, setQuantityError] = useState<string | null>(null)
 
   const [editingIcon, setEditingIcon] = useState(false)
-  const [iconDraft, setIconDraft] = useState('')
   const [savingIcon, setSavingIcon] = useState(false)
   const [iconError, setIconError] = useState<string | null>(null)
 
@@ -41,24 +41,17 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged }: Pro
 
   const startEditingIcon = () => {
     setIconError(null)
-    setIconDraft(product.icon)
     setEditingIcon(true)
   }
 
-  // A blank field or the icon unchanged means "never mind" — nothing to save,
-  // and no reason to spend a request confirming the current value.
-  const commitIcon = () => {
-    const next = iconDraft.trim()
-    if (next === '' || next === product.icon) {
-      setEditingIcon(false)
-      return
-    }
-
+  // Called only with a value already checked to be worth saving — see
+  // IconPicker, which never calls this for a no-op selection.
+  const commitIcon = (icon: string) => {
     setSavingIcon(true)
     setIconError(null)
     void (async () => {
       try {
-        onProductChanged(await setProductIcon(product.id, next))
+        onProductChanged(await setProductIcon(product.id, icon))
         setEditingIcon(false)
       } catch (caught) {
         setIconError(toErrorMessage(caught))
@@ -68,56 +61,53 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged }: Pro
     })()
   }
 
-  const handleIconKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') commitIcon()
-    if (event.key === 'Escape') setEditingIcon(false)
-  }
-
   return (
     <li className={`product-card product-card--${product.status}`}>
       <div className="product-card__main">
         <h2 className="product-card__name">
-          {editingIcon ? (
-            <input
-              type="text"
-              className="product-card__icon-input"
-              value={iconDraft}
-              onChange={(event) => setIconDraft(event.target.value)}
-              onBlur={commitIcon}
-              onKeyDown={handleIconKeyDown}
-              disabled={savingIcon}
-              maxLength={16}
-              autoFocus
-              aria-label={`Cambiar icono de ${product.name}`}
-            />
-          ) : (
-            <button
-              type="button"
-              className="product-card__icon-button"
-              onClick={startEditingIcon}
-              aria-label={`Cambiar icono de ${product.name}, actualmente ${product.icon}`}
-            >
-              {product.icon}
-            </button>
-          )}
+          <button
+            type="button"
+            className="product-card__icon-button"
+            onClick={startEditingIcon}
+            aria-label={`Cambiar icono de ${product.name}, actualmente ${product.icon}`}
+          >
+            {product.icon}
+          </button>
           {/* Its own element so a caller can read the name without the icon
               prefix mixed into textContent — see ProductList.test.tsx's
               headingNames() helper. */}
           <span className="product-card__name-text">{product.name}</span>
         </h2>
+
+        {editingIcon && (
+          <IconPicker
+            value={product.icon}
+            busy={savingIcon}
+            onSelect={commitIcon}
+            onCancel={() => setEditingIcon(false)}
+            label={`Cambiar icono de ${product.name}`}
+          />
+        )}
+
         <p className="product-card__meta">
           {product.category ? <span>{product.category.name}</span> : <span className="product-card__uncategorised">Sin categoría</span>}
           <span aria-hidden="true">·</span>
           <span className="quantity-stepper">
-            <button
-              type="button"
-              className="quantity-stepper__button"
-              onClick={() => adjustQuantity(-1)}
-              disabled={adjustingQuantity || !canStepDown(product.quantity)}
-              aria-label={`Reducir cantidad de ${product.name}`}
-            >
-              −
-            </button>
+            {/* Hidden rather than disabled at quantity 1 — a stepper that is
+                half-buttons for most of the list (single-item products are
+                common) reads as cluttered for no benefit, since the button
+                does nothing there either way. */}
+            {canStepDown(product.quantity) && (
+              <button
+                type="button"
+                className="quantity-stepper__button"
+                onClick={() => adjustQuantity(-1)}
+                disabled={adjustingQuantity}
+                aria-label={`Reducir cantidad de ${product.name}`}
+              >
+                −
+              </button>
+            )}
             <span className="quantity-stepper__value">{quantityLabel(product.quantity, product.unit)}</span>
             <button
               type="button"

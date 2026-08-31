@@ -3,11 +3,16 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Modal } from '@/components/Modal'
 import { ThemePicker } from '@/components/ThemePicker'
 import { toErrorMessage } from '@/services/api'
+import { reassignIcons } from '@/services/productsService'
 import { getSettings, saveIconSettings, saveSettings, triggerAlert } from '@/services/settingsService'
 import type { SettingsResponse } from '@/services/types'
 
 interface SettingsDialogProps {
   onClose: () => void
+  /** Called once after a successful icon reassignment, so the product list
+   *  behind the dialog picks up the new icons instead of showing stale ones
+   *  until something else happens to trigger a reload. */
+  onIconsReassigned: () => void
 }
 
 /**
@@ -32,7 +37,7 @@ function formatNextRun(iso: string, timeZone: string): string {
  *  actually works. Two backend resources (see PUT /settings and PUT
  *  /settings/icons), one screen, one Guardar — the split exists to protect
  *  each setting from the other's payload, not to make the user click twice. */
-export function SettingsDialog({ onClose }: SettingsDialogProps) {
+export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogProps) {
   const [current, setCurrent] = useState<SettingsResponse | null>(null)
   const [enabled, setEnabled] = useState(true)
   const [alertTime, setAlertTime] = useState('08:00')
@@ -42,6 +47,8 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
+  const [reassigning, setReassigning] = useState(false)
+  const [reassignResult, setReassignResult] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -108,6 +115,27 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
     })()
   }
 
+  const handleReassign = () => {
+    setReassigning(true)
+    setReassignResult(null)
+    setError(null)
+    void (async () => {
+      try {
+        const result = await reassignIcons()
+        setReassignResult(
+          result.considered === 0
+            ? 'No hay productos pendientes de icono.'
+            : `${result.updated} de ${result.considered} productos actualizados.`,
+        )
+        if (result.updated > 0) onIconsReassigned()
+      } catch (caught) {
+        setError(toErrorMessage(caught))
+      } finally {
+        setReassigning(false)
+      }
+    })()
+  }
+
   return (
     <Modal title="Ajustes" onClose={onClose}>
       {current === null && !error && <p className="state state--loading">Cargando…</p>}
@@ -164,6 +192,15 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
             <input type="checkbox" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
             <span>Asignar icono con IA cuando la tabla local no reconozca el producto</span>
           </label>
+
+          <button type="button" onClick={handleReassign} disabled={reassigning}>
+            {reassigning ? 'Reasignando…' : 'Reasignar iconos'}
+          </button>
+          <p className="settings__hint">
+            Vuelve a intentar los productos que se quedaron con el icono por defecto — por ejemplo, los que ya
+            existían antes de esta función.
+          </p>
+          {reassignResult && <p className="settings__hint">{reassignResult}</p>}
 
           {error && (
             <p className="form__error" role="alert">

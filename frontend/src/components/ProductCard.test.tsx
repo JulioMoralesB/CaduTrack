@@ -74,11 +74,17 @@ describe('ProductCard quantity stepper', () => {
     await waitFor(() => expect(mockedAdjust).toHaveBeenCalledWith(1, -1))
   })
 
-  it('disables "−" at quantity 1, offering no path to zero', () => {
+  it('hides "−" at quantity 1 rather than disabling it, offering no path to zero', () => {
     renderCard({ quantity: '1.00' })
 
-    expect(screen.getByRole('button', { name: 'Reducir cantidad de Plátano' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Reducir cantidad de Plátano' })).not.toBeInTheDocument()
     expect(mockedAdjust).not.toHaveBeenCalled()
+  })
+
+  it('shows "−" again once the quantity is above 1', () => {
+    renderCard({ quantity: '2.00' })
+
+    expect(screen.getByRole('button', { name: 'Reducir cantidad de Plátano' })).toBeInTheDocument()
   })
 
   it('keeps "+" enabled at quantity 1 — there is no upper bound', () => {
@@ -124,66 +130,104 @@ describe('ProductCard icon override', () => {
     expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
   })
 
-  it('clicking the icon opens an editable field prefilled with the current icon', () => {
+  it('clicking the icon opens a grid of common emoji, highlighting the current one', () => {
     renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
 
-    expect(screen.getByLabelText('Cambiar icono de Plátano')).toHaveValue('\u{1F34C}')
+    const current = screen.getByRole('button', { name: '\u{1F34C}' })
+    expect(current).toHaveAttribute('aria-pressed', 'true')
+    // Some other option from the grid, to prove it is more than one button.
+    expect(screen.getByRole('button', { name: '\u{1F34E}' })).toBeInTheDocument()
   })
 
-  it('committing a new icon with Enter sends it and marks the change manual on the server side', async () => {
+  it('tapping a grid option saves it immediately, no separate confirm step', async () => {
     const updated = product({ icon: '\u{1F34E}', icon_source: 'manual' })
     mockedSetIcon.mockResolvedValue(updated)
     const { onProductChanged } = renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
-    const input = screen.getByLabelText('Cambiar icono de Plátano')
-    fireEvent.change(input, { target: { value: '\u{1F34E}' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: '\u{1F34E}' }))
 
     await waitFor(() => expect(onProductChanged).toHaveBeenCalledWith(updated))
     expect(mockedSetIcon).toHaveBeenCalledWith(1, '\u{1F34E}')
   })
 
-  it('committing on blur works the same as pressing Enter', async () => {
-    mockedSetIcon.mockResolvedValue(product({ icon: '\u{1F34E}', icon_source: 'manual' }))
+  it('tapping the current icon again in the grid is a no-op, not a wasted request', () => {
     renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
-    const input = screen.getByLabelText('Cambiar icono de Plátano')
-    fireEvent.change(input, { target: { value: '\u{1F34E}' } })
-    fireEvent.blur(input)
+    fireEvent.click(screen.getByRole('button', { name: '\u{1F34C}' }))
 
-    await waitFor(() => expect(mockedSetIcon).toHaveBeenCalledWith(1, '\u{1F34E}'))
+    expect(mockedSetIcon).not.toHaveBeenCalled()
   })
 
-  it('leaving the icon unchanged closes the editor without a request', () => {
+  it('"Otro" reveals a text field prefilled with the current icon, for anything not in the grid', () => {
     renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
+
+    expect(screen.getByLabelText('Cambiar icono de Plátano')).toHaveValue('\u{1F34C}')
+  })
+
+  it('committing a new icon in "Otro" with Enter sends it and marks the change manual', async () => {
+    const updated = product({ icon: '\u{1F9C1}', icon_source: 'manual' })
+    mockedSetIcon.mockResolvedValue(updated)
+    const { onProductChanged } = renderCard({ icon: '\u{1F34C}' })
+
+    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
+    const input = screen.getByLabelText('Cambiar icono de Plátano')
+    fireEvent.change(input, { target: { value: '\u{1F9C1}' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(onProductChanged).toHaveBeenCalledWith(updated))
+    expect(mockedSetIcon).toHaveBeenCalledWith(1, '\u{1F9C1}')
+  })
+
+  it('committing on blur works the same as pressing Enter', async () => {
+    mockedSetIcon.mockResolvedValue(product({ icon: '\u{1F9C1}', icon_source: 'manual' }))
+    renderCard({ icon: '\u{1F34C}' })
+
+    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
+    const input = screen.getByLabelText('Cambiar icono de Plátano')
+    fireEvent.change(input, { target: { value: '\u{1F9C1}' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => expect(mockedSetIcon).toHaveBeenCalledWith(1, '\u{1F9C1}'))
+  })
+
+  it('leaving "Otro" unchanged closes the editor without a request', () => {
+    renderCard({ icon: '\u{1F34C}' })
+
+    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     fireEvent.blur(screen.getByLabelText('Cambiar icono de Plátano'))
 
     expect(mockedSetIcon).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toBeInTheDocument()
   })
 
-  it('Escape cancels the edit without saving, even if the field was changed', () => {
+  it('Escape in "Otro" cancels without saving, even if the field was changed', () => {
     renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     const input = screen.getByLabelText('Cambiar icono de Plátano')
-    fireEvent.change(input, { target: { value: '\u{1F34E}' } })
+    fireEvent.change(input, { target: { value: '\u{1F9C1}' } })
     fireEvent.keyDown(input, { key: 'Escape' })
 
     expect(mockedSetIcon).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
   })
 
-  it('an empty field closes the editor without a request rather than sending a blank icon', () => {
+  it('an empty "Otro" field closes the editor without a request rather than sending a blank icon', () => {
     renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     const input = screen.getByLabelText('Cambiar icono de Plátano')
     fireEvent.change(input, { target: { value: '   ' } })
     fireEvent.blur(input)
@@ -191,16 +235,44 @@ describe('ProductCard icon override', () => {
     expect(mockedSetIcon).not.toHaveBeenCalled()
   })
 
+  it('"Cerrar" closes the picker without saving', () => {
+    renderCard({ icon: '\u{1F34C}' })
+
+    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar selector de icono' }))
+
+    expect(mockedSetIcon).not.toHaveBeenCalled()
+    expect(screen.queryByRole('group', { name: 'Iconos comunes' })).not.toBeInTheDocument()
+  })
+
+  it('disables the grid while a selection is being saved', async () => {
+    let resolveRequest: (product: Product) => void = () => {}
+    mockedSetIcon.mockReturnValue(
+      new Promise<Product>((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+    renderCard({ icon: '\u{1F34C}' })
+
+    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    fireEvent.click(screen.getByRole('button', { name: '\u{1F34E}' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '\u{1F34E}' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Otro…' })).toBeDisabled()
+
+    resolveRequest(product({ icon: '\u{1F34E}', icon_source: 'manual' }))
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Iconos comunes' })).not.toBeInTheDocument())
+  })
+
   it('shows the failure inline and leaves the icon showing the old value', async () => {
     mockedSetIcon.mockRejectedValue(new Error('nope'))
     const { onProductChanged } = renderCard({ icon: '\u{1F34C}' })
 
     fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
-    const input = screen.getByLabelText('Cambiar icono de Plátano')
-    fireEvent.change(input, { target: { value: '\u{1F34E}' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: '\u{1F34E}' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(onProductChanged).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
   })
 })
