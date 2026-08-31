@@ -28,20 +28,20 @@ describe('products service retries', () => {
       .mockResolvedValue({ data: { id: 7 } })
 
     await expect(createProduct(payload)).resolves.toEqual({ id: 7 })
-    expect(mockedApi.post).toHaveBeenCalledTimes(2)
+    expect(mockedApi.post.mock.calls).toHaveLength(2)
   })
 
   it('retries a replace through a dropped connection', async () => {
     mockedApi.put.mockRejectedValueOnce(networkError()).mockResolvedValue({ data: { id: 7 } })
 
     await expect(replaceProduct(7, payload)).resolves.toEqual({ id: 7 })
-    expect(mockedApi.put).toHaveBeenCalledTimes(2)
+    expect(mockedApi.put.mock.calls).toHaveLength(2)
   })
 
   it('never repeats a delete, which would report a 404 for work that succeeded', async () => {
     mockedApi.delete.mockRejectedValue(networkError())
 
     await expect(deleteProduct(7)).rejects.toThrow('Network Error')
-    expect(mockedApi.delete).toHaveBeenCalledTimes(1)
+    expect(mockedApi.delete.mock.calls).toHaveLength(1)
   })
 })
