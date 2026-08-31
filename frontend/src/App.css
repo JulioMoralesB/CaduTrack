@@ -86,6 +86,41 @@
   color: var(--status-color, var(--text));
 }
 
+.product-card__quantity-error {
+  color: var(--danger);
+  font-size: 0.8125rem;
+}
+
+/* Used both on the card (value is plain text) and in the form (value is the
+   quantity input), so the button styling lives here once. */
+.quantity-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.quantity-stepper__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 0.375rem;
+}
+
+.quantity-stepper__value {
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.quantity-stepper__input {
+  width: 4.5rem;
+  text-align: center;
+}
+
 .state {
   padding: 2.5rem 1rem;
   text-align: center;
@@ -203,7 +238,8 @@
   gap: 0.3rem;
 }
 
-.form__field > span {
+.form__field > span,
+.form__field > label {
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-muted);

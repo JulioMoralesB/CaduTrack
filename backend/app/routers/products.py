@@ -4,12 +4,12 @@ import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.models import Category, Location, Product
-from app.schemas.product import ProductCreate, ProductRead, ProductUpdate
+from app.schemas.product import ProductCreate, ProductQuantityDelta, ProductRead, ProductUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,44 @@ def replace_product(
     # until we read it back.
     db.refresh(product)
     logger.info("Updated product %s (%s)", product.id, product.name)
+    return product
+
+
+@router.patch("/{product_id}/quantity", response_model=ProductRead)
+def adjust_quantity(
+    product_id: int, payload: ProductQuantityDelta, db: Session = Depends(get_db)
+) -> Product:
+    """Apply a relative change to a product's quantity.
+
+    Deliberately a delta, not PATCH-with-an-absolute-value: see
+    ProductQuantityDelta. The UPDATE below is what makes the delta contract
+    actually safe under concurrent requests, not just in principle. `quantity`
+    is read and written in the same statement, evaluated against the row's
+    live value at the moment of the update under Postgres's row lock — not a
+    value this function fetched earlier and might be replaying against a stale
+    read. Two overlapping requests serialize on that lock and each is applied
+    to what the other left behind, so composing correctly does not depend on
+    which one the database happens to run first.
+    """
+    product = _get_or_404(db, product_id)
+
+    result = db.execute(
+        update(Product)
+        .where(Product.id == product_id, Product.quantity + payload.delta > 0)
+        .values(quantity=Product.quantity + payload.delta)
+    )
+    if result.rowcount == 0:
+        # The existence check above already passed, so the only way to match
+        # zero rows here is the WHERE clause's positivity guard — the database
+        # constraint would catch this too, but as a 500 with no useful detail.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Adjusting by {payload.delta} would leave a non-positive quantity",
+        )
+
+    db.commit()
+    db.refresh(product)
+    logger.info("Adjusted product %s (%s) quantity by %s", product.id, product.name, payload.delta)
     return product
 
 

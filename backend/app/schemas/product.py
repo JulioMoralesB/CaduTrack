@@ -35,6 +35,18 @@ class ProductUpdate(ProductBase):
     """
 
 
+class ProductQuantityDelta(BaseModel):
+    """A relative change to a product's quantity.
+
+    Sent as a delta rather than an absolute value: two quick taps racing on a
+    slow connection both send "-1" and compose correctly regardless of arrival
+    order, where two absolute values ("quantity = 4" twice) would silently
+    drop one of the taps. See #82.
+    """
+
+    delta: Decimal = Field(max_digits=10, decimal_places=2)
+
+
 class ProductRead(ProductBase):
     """A product as returned by the API."""
 
