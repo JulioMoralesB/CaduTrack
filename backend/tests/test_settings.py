@@ -187,3 +187,17 @@ def test_saving_alert_settings_never_touches_the_icon_toggle(api_client):
     api_client.put("/settings", json={"enabled": True, "alert_time": "09:00", "days_ahead": 3})
 
     assert api_client.get("/settings").json()["icons"]["ai_enabled"] is False
+
+
+@pytest.mark.integration
+def test_get_reports_the_backend_version(api_client, monkeypatch):
+    monkeypatch.setattr(env_settings, "app_version", "v0.11.0")
+
+    assert api_client.get("/settings").json()["backend_version"] == "v0.11.0"
+
+
+@pytest.mark.integration
+def test_get_reports_dev_outside_the_release_pipeline(api_client, monkeypatch):
+    monkeypatch.setattr(env_settings, "app_version", "dev")
+
+    assert api_client.get("/settings").json()["backend_version"] == "dev"

@@ -1,5 +1,13 @@
 FROM python:3.13-slim
 
+# The release tag this image is built from — only the release workflow passes
+# a real value here (via --build-arg VERSION=${{ github.ref_name }}); a local
+# build stays "dev". Read by app/config.py and surfaced through /health and
+# /settings, so a running container can be checked against what was actually
+# tagged and pushed instead of assumed.
+ARG VERSION=dev
+ENV APP_VERSION=${VERSION}
+
 WORKDIR /app
 
 # Run as a non-root user, matching apollo-server-dashboard's backend image.

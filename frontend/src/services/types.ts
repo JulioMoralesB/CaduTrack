@@ -75,6 +75,9 @@ export interface SettingsResponse {
    *  can be true with this false, the same distinction telegram_configured
    *  draws for alerts. */
   ollama_configured: boolean
+  /** The release tag the backend was built from — "dev" outside the release
+   *  pipeline. Compared against the frontend's own build-time version. */
+  backend_version: string
 }
 
 export type AlertSettingsPayload = Pick<AlertSettings, 'enabled' | 'alert_time' | 'days_ahead'>

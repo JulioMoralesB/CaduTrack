@@ -35,6 +35,7 @@ def _response(db: Session) -> SettingsResponse:
         next_run_at=next_run_time(),
         timezone=env_settings.timezone,
         ollama_configured=bool(env_settings.ollama_url),
+        backend_version=env_settings.app_version,
     )
 
 

@@ -453,6 +453,20 @@
   color: var(--text-muted);
 }
 
+.settings__version {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.settings__version--mismatch {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .settings__section-title {
   margin-top: 0.25rem;
   font-size: 0.8125rem;
