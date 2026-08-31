@@ -51,21 +51,29 @@ describe('SettingsDialog', () => {
     expect(mockedSave).toHaveBeenCalledWith({ enabled: true, alert_time: '19:45', days_ahead: 3 })
   })
 
-  it('shows the rescheduled next run after saving', async () => {
+  it('closes once the save succeeds', async () => {
+    // Leaving it open reads as "nothing happened", which is what every other
+    // app taught the user to expect otherwise.
+    const onClose = vi.fn()
     mockedGet.mockResolvedValue(response())
-    mockedSave.mockResolvedValue(
-      response({ alerts: { enabled: true, alert_time: '19:45', days_ahead: 7, updated_at: '' }, next_run_at: '2026-08-31T19:45:00-06:00' }),
-    )
+    mockedSave.mockResolvedValue(response())
 
-    render(<SettingsDialog onClose={vi.fn()} />)
-    await screen.findByLabelText('Hora')
-    expect(screen.getByText(/Próxima alerta:/)).toHaveTextContent(/8:00/)
-
+    render(<SettingsDialog onClose={onClose} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
 
-    // The minute is locale-independent; es-MX renders the hour as "7:45 p.m.".
-    // Seeing it move proves the server rescheduled, not merely stored.
-    await waitFor(() => expect(screen.getByText(/Próxima alerta:/)).toHaveTextContent(/:45/))
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('stays open with the reason when the save fails', async () => {
+    const onClose = vi.fn()
+    mockedGet.mockResolvedValue(response())
+    mockedSave.mockRejectedValue(new Error('boom'))
+
+    render(<SettingsDialog onClose={onClose} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('warns when Telegram is unconfigured and blocks the test send', async () => {

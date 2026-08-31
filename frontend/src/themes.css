@@ -95,86 +95,31 @@
   --status-expired: #e89090;
 }
 
-[data-theme="arena"][data-mode="light"] {
-  --bg: #faf6ef;
-  --surface: #fffdf9;
-  --text: #2a2118;
-  --text-muted: #6f6152;
-  --border: #e8ded0;
-  --accent: #a9662a;
-  --danger: #a83232;
-  --on-fill: #fffdf9;
-  --status-fresh: #3f7d32;
-  --status-expiring-soon: #8a5a06;
-  --status-expired: #a83232;
-}
-
-[data-theme="arena"][data-mode="dark"] {
-  --bg: #1a1611;
-  --surface: #241f18;
-  --text: #f0e9df;
-  --text-muted: #ada197;
-  --border: #3a3229;
-  --accent: #d9a066;
-  --danger: #e08585;
-  --on-fill: #1a1611;
-  --status-fresh: #8cc47f;
-  --status-expiring-soon: #e0a33a;
-  --status-expired: #e89090;
-}
-
 [data-theme="ciruela"][data-mode="light"] {
-  --bg: #f8f4fa;
+  --bg: #f7f5f8;
   --surface: #ffffff;
-  --text: #241a29;
-  --text-muted: #6b5c74;
-  --border: #e6dcec;
-  --accent: #7a3f8f;
-  --danger: #b03452;
+  --text: #241f28;
+  --text-muted: #6b6273;
+  --border: #e5e0e9;
+  --accent: #6d5580;
+  --danger: #a8455e;
   --on-fill: #ffffff;
   --status-fresh: #2f7d32;
   --status-expiring-soon: #9a6206;
-  --status-expired: #b03452;
+  --status-expired: #a8455e;
 }
 
 [data-theme="ciruela"][data-mode="dark"] {
-  --bg: #16101a;
-  --surface: #201826;
-  --text: #efe7f3;
-  --text-muted: #a99bb2;
-  --border: #342a3c;
-  --accent: #c193d4;
-  --danger: #e88ba0;
-  --on-fill: #16101a;
+  --bg: #16131a;
+  --surface: #201c26;
+  --text: #eee9f0;
+  --text-muted: #a79fae;
+  --border: #332c3c;
+  --accent: #b09ac0;
+  --danger: #d98da0;
+  --on-fill: #16131a;
   --status-fresh: #7fbf7a;
   --status-expiring-soon: #e0a33a;
-  --status-expired: #e88ba0;
+  --status-expired: #d98da0;
 }
 
-[data-theme="contraste"][data-mode="light"] {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --text: #000000;
-  --text-muted: #3a3a3a;
-  --border: #000000;
-  --accent: #0000cc;
-  --danger: #c00000;
-  --on-fill: #ffffff;
-  --status-fresh: #006600;
-  --status-expiring-soon: #8a4b00;
-  --status-expired: #c00000;
-}
-
-[data-theme="contraste"][data-mode="dark"] {
-  --bg: #000000;
-  --surface: #000000;
-  --text: #ffffff;
-  --text-muted: #d0d0d0;
-  --border: #ffffff;
-  --accent: #7ab8ff;
-  --danger: #ff8080;
-  --on-fill: #000000;
-  --status-fresh: #5ce65c;
-  --status-expiring-soon: #ffc14d;
-  --status-expired: #ff8080;
-}

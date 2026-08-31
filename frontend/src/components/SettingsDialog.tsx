@@ -66,10 +66,13 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
 
     void (async () => {
       try {
-        // The response carries the rescheduled next run, so the user sees the
-        // change take effect rather than having to trust it.
-        setCurrent(await saveSettings({ enabled, alert_time: alertTime, days_ahead: Number(daysAhead) }))
+        await saveSettings({ enabled, alert_time: alertTime, days_ahead: Number(daysAhead) })
+        // Close on success, as every other app does. The rescheduled next run
+        // is still shown on the next open; keeping the dialog up to display it
+        // traded the expected behaviour for a confirmation nobody asked for.
+        onClose()
       } catch (caught) {
+        // A failure is the case that genuinely needs the dialog to stay put.
         setError(toErrorMessage(caught))
       } finally {
         setSaving(false)
