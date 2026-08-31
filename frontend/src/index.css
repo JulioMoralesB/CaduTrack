@@ -1,41 +1,14 @@
-:root {
-  --bg: #f6f7f5;
-  --surface: #ffffff;
-  --text: #1c1f1a;
-  --text-muted: #5f6b5a;
-  --border: #dfe3db;
-  --accent: #3f7d3a;
-  --danger: #b03434;
-  /* Text sitting on an --accent or --danger fill. It flips with the theme:
-     the dark palette lightens those fills, so white text on them is unreadable. */
-  --on-fill: #ffffff;
-  /* Expiry status. These are used for text as well as the card stripe, so they
-     are picked for contrast against --surface, not for maximum saturation. */
-  --status-fresh: #2f7d32;
-  --status-expiring-soon: #9a6206;
-  --status-expired: #b03434;
+@import './themes.css';
 
+/* Structural styles. Every colour comes from a theme token, so nothing here
+   needs to know which palette is active. */
+
+:root {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   color: var(--text);
   background-color: var(--bg);
   -webkit-font-smoothing: antialiased;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14170f;
-    --surface: #1e221a;
-    --text: #eef1e9;
-    --text-muted: #a3ac9c;
-    --border: #333a2d;
-    --accent: #8fc98a;
-    --danger: #e08585;
-    --on-fill: #14170f;
-    --status-fresh: #7fbf7a;
-    --status-expiring-soon: #e0a33a;
-    --status-expired: #e08585;
-  }
 }
 
 * {

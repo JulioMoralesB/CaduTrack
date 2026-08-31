@@ -9,6 +9,24 @@
     <meta name="description" content="Registra lo que compras y entérate antes de que caduque." />
     <meta name="theme-color" content="#3f7d3a" />
     <title>CaduTrack</title>
+    <script>
+      // Inline and blocking on purpose: applying the stored theme from a module
+      // would happen after first paint, flashing the default palette on every
+      // load. Wrapped because localStorage throws in some privacy modes, and a
+      // themed page is not worth a blank one.
+      try {
+        var t = localStorage.getItem('cadutrack:theme') || 'bosque';
+        var m = localStorage.getItem('cadutrack:mode') || 'auto';
+        document.documentElement.dataset.theme = t;
+        document.documentElement.dataset.mode =
+          m === 'auto'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : m;
+      } catch (e) {
+        document.documentElement.dataset.theme = 'bosque';
+        document.documentElement.dataset.mode = 'light';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
