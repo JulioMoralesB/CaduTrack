@@ -7,9 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
+from app import icon_cache, icon_settings_store
 from app.db.session import get_db
-from app.icons import DEFAULT_ICON, resolve_icon
+from app.icons import DEFAULT_ICON, normalize, resolve_icon
 from app.models import Category, IconSource, Location, Product
+from app.ollama_client import resolve_icon_via_model
 from app.schemas.product import (
     ProductCreate,
     ProductIconUpdate,
@@ -82,18 +84,46 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     return _get_or_404(db, product_id)
 
 
+def _resolve_icon(db: Session, name: str) -> tuple[str, IconSource]:
+    """The icon for a new product, and how it was decided.
+
+    Four steps, cheapest first, each only reached when the one before it
+    misses: the local table (instant, no query), the name cache (one query,
+    no network), the model (one query plus a call to Ollama), and finally the
+    default. Any step that succeeds short-circuits the rest.
+    """
+    table_hit = resolve_icon(name)
+    if table_hit != DEFAULT_ICON:
+        return table_hit, IconSource.LOOKUP
+
+    if not icon_settings_store.ai_enabled(db):
+        return DEFAULT_ICON, IconSource.DEFAULT
+
+    normalized = normalize(name)
+    cached = icon_cache.get(db, normalized)
+    if cached is not None:
+        return cached, IconSource.AI
+
+    model_icon = resolve_icon_via_model(name)
+    if model_icon is None:
+        return DEFAULT_ICON, IconSource.DEFAULT
+
+    icon_cache.remember(db, normalized, model_icon)
+    return model_icon, IconSource.AI
+
+
 @router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Product:
     """Create a product.
 
-    The icon is assigned here, once, from the local lookup table — never from
-    a value the client sends, since ProductCreate has no icon field. A miss
-    gets DEFAULT_ICON rather than an empty space.
+    The icon is assigned here, once — never from a value the client sends,
+    since ProductCreate has no icon field. See _resolve_icon for the order it
+    is decided in; a miss at every step still gets DEFAULT_ICON rather than an
+    empty space.
     """
     _validate_category(db, payload.category_id)
 
-    icon = resolve_icon(payload.name)
-    icon_source = IconSource.DEFAULT if icon == DEFAULT_ICON else IconSource.LOOKUP
+    icon, icon_source = _resolve_icon(db, payload.name)
 
     product = Product(**payload.model_dump(), icon=icon, icon_source=icon_source)
     db.add(product)

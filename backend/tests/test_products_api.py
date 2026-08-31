@@ -345,3 +345,64 @@ def test_an_empty_icon_is_rejected(api_client):
     response = api_client.patch(f"/products/{product_id}/icon", json={"icon": ""})
 
     assert response.status_code == 422
+
+
+@pytest.mark.integration
+def test_a_table_hit_never_calls_the_model(api_client, mocker):
+    mocked = mocker.patch("app.routers.products.resolve_icon_via_model")
+
+    response = api_client.post("/products", json=_product(name="Plátano"))
+
+    assert response.json()["icon_source"] == "lookup"
+    mocked.assert_not_called()
+
+
+@pytest.mark.integration
+def test_a_table_miss_falls_back_to_the_model_when_enabled(api_client, mocker):
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value="\U0001F944")
+
+    response = api_client.post("/products", json=_product(name="Kombucha"))
+
+    body = response.json()
+    assert body["icon"] == "\U0001F944"
+    assert body["icon_source"] == "ai"
+
+
+@pytest.mark.integration
+def test_the_same_name_calls_the_model_at_most_once(api_client, mocker):
+    """The point of the cache: a product bought twice must not pay for a
+    second call, whether or not it is literally the same product row."""
+    mocked = mocker.patch("app.routers.products.resolve_icon_via_model", return_value="\U0001F944")
+
+    api_client.post("/products", json=_product(name="Kombucha"))
+    second = api_client.post("/products", json=_product(name="KOMBUCHA"))
+
+    assert mocked.call_count == 1
+    assert second.json()["icon"] == "\U0001F944"
+    assert second.json()["icon_source"] == "ai"
+
+
+@pytest.mark.integration
+def test_the_toggle_off_skips_the_model_and_the_cache_still_is_not_consulted_for_nothing(api_client, mocker):
+    api_client.put("/settings/icons", json={"ai_enabled": False})
+    mocked = mocker.patch("app.routers.products.resolve_icon_via_model")
+
+    response = api_client.post("/products", json=_product(name="Kombucha"))
+
+    mocked.assert_not_called()
+    assert response.json()["icon_source"] == "default"
+    assert response.json()["icon"] == "\U0001F9FA"
+
+
+@pytest.mark.integration
+def test_a_model_failure_falls_back_to_the_default_icon(api_client, mocker):
+    """resolve_icon_via_model returning None is the "any failure" contract —
+    product creation must not surface it as an error."""
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+
+    response = api_client.post("/products", json=_product(name="Kombucha"))
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["icon"] == "\U0001F9FA"
+    assert body["icon_source"] == "default"

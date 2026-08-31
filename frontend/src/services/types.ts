@@ -57,17 +57,29 @@ export interface AlertSettings {
   updated_at: string
 }
 
+export interface IconSettings {
+  ai_enabled: boolean
+  updated_at: string
+}
+
 export interface SettingsResponse {
   alerts: AlertSettings
+  icons: IconSettings
   /** Derived from the server's environment. The token itself is never sent. */
   telegram_configured: boolean
   /** ISO timestamp, or null when nothing is scheduled. */
   next_run_at: string | null
   /** IANA zone the alert time is expressed in. */
   timezone: string
+  /** Whether the icon model fallback has anywhere to call — icons.ai_enabled
+   *  can be true with this false, the same distinction telegram_configured
+   *  draws for alerts. */
+  ollama_configured: boolean
 }
 
 export type AlertSettingsPayload = Pick<AlertSettings, 'enabled' | 'alert_time' | 'days_ahead'>
+
+export type IconSettingsPayload = Pick<IconSettings, 'ai_enabled'>
 
 export interface AlertTriggerResult {
   sent: boolean

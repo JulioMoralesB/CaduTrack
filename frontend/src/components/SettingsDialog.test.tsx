@@ -7,26 +7,34 @@ import type { SettingsResponse } from '@/services/types'
 vi.mock('@/services/settingsService', () => ({
   getSettings: vi.fn(),
   saveSettings: vi.fn(),
+  saveIconSettings: vi.fn(),
   triggerAlert: vi.fn(),
 }))
 
 const service = await import('@/services/settingsService')
 const mockedGet = vi.mocked(service.getSettings)
 const mockedSave = vi.mocked(service.saveSettings)
+const mockedSaveIcons = vi.mocked(service.saveIconSettings)
 const mockedTrigger = vi.mocked(service.triggerAlert)
 
 function response(overrides: Partial<SettingsResponse> = {}): SettingsResponse {
   return {
     alerts: { enabled: true, alert_time: '08:00', days_ahead: 7, updated_at: '2026-08-30T00:00:00Z' },
+    icons: { ai_enabled: true, updated_at: '2026-08-30T00:00:00Z' },
     telegram_configured: true,
     next_run_at: '2026-08-31T08:00:00-06:00',
     // Pinned so the rendered time does not depend on the runner's zone.
     timezone: 'America/Mexico_City',
+    ollama_configured: true,
     ...overrides,
   }
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockedSave.mockResolvedValue(response())
+  mockedSaveIcons.mockResolvedValue(response())
+})
 
 describe('SettingsDialog', () => {
   it('loads the stored settings into the form', async () => {
@@ -36,11 +44,11 @@ describe('SettingsDialog', () => {
 
     expect(await screen.findByLabelText('Hora')).toHaveValue('08:00')
     expect(screen.getByLabelText('Días de anticipación')).toHaveValue(7)
+    expect(screen.getByLabelText(/Asignar icono con IA/)).toBeChecked()
   })
 
   it('saves what the user changed', async () => {
     mockedGet.mockResolvedValue(response())
-    mockedSave.mockResolvedValue(response())
 
     render(<SettingsDialog onClose={vi.fn()} />)
     fireEvent.change(await screen.findByLabelText('Hora'), { target: { value: '19:45' } })
@@ -51,12 +59,23 @@ describe('SettingsDialog', () => {
     expect(mockedSave).toHaveBeenCalledWith({ enabled: true, alert_time: '19:45', days_ahead: 3 })
   })
 
+  it('saves the icon toggle through its own endpoint, alongside the alert save', async () => {
+    mockedGet.mockResolvedValue(response({ icons: { ai_enabled: true, updated_at: '2026-08-30T00:00:00Z' } }))
+
+    render(<SettingsDialog onClose={vi.fn()} />)
+    fireEvent.click(await screen.findByLabelText(/Asignar icono con IA/))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => expect(mockedSaveIcons).toHaveBeenCalledWith({ ai_enabled: false }))
+    // Both requests fire, not one instead of the other.
+    expect(mockedSave).toHaveBeenCalledTimes(1)
+  })
+
   it('closes once the save succeeds', async () => {
     // Leaving it open reads as "nothing happened", which is what every other
     // app taught the user to expect otherwise.
     const onClose = vi.fn()
     mockedGet.mockResolvedValue(response())
-    mockedSave.mockResolvedValue(response())
 
     render(<SettingsDialog onClose={onClose} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
@@ -64,10 +83,22 @@ describe('SettingsDialog', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
-  it('stays open with the reason when the save fails', async () => {
+  it('stays open with the reason when the alert save fails', async () => {
     const onClose = vi.fn()
     mockedGet.mockResolvedValue(response())
     mockedSave.mockRejectedValue(new Error('boom'))
+
+    render(<SettingsDialog onClose={onClose} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('stays open with the reason when the icon-toggle save fails', async () => {
+    const onClose = vi.fn()
+    mockedGet.mockResolvedValue(response())
+    mockedSaveIcons.mockRejectedValue(new Error('boom'))
 
     render(<SettingsDialog onClose={onClose} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
@@ -83,6 +114,17 @@ describe('SettingsDialog', () => {
 
     expect(await screen.findByText(/Telegram sin configurar/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Enviar prueba' })).toBeDisabled()
+  })
+
+  it('warns when Ollama is unconfigured, without disabling the toggle itself', async () => {
+    mockedGet.mockResolvedValue(response({ ollama_configured: false }))
+
+    render(<SettingsDialog onClose={vi.fn()} />)
+
+    expect(await screen.findByText(/Modelo de iconos sin configurar/)).toBeInTheDocument()
+    // Unlike the Telegram test button, nothing here needs to be disabled: an
+    // unreachable model already degrades to the default icon on its own.
+    expect(screen.getByLabelText(/Asignar icono con IA/)).toBeEnabled()
   })
 
   it('says so when nothing is scheduled', async () => {

@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     # Daily alert time, HH:MM in TIMEZONE.
     alert_time: str = "08:00"
 
+    # ── Icons ────────────────────────────────────────────────────────────────
+    # The homelab's local Ollama instance. Empty disables the model fallback
+    # entirely — the local lookup table and the default icon still work,
+    # exactly as an unset Telegram token disables alerts rather than erroring.
+    # Never a public model API: the whole point is that this stays free and
+    # offline-capable, and product names never leave the LAN.
+    ollama_url: str = ""
+    ollama_model: str = "qwen3.5:4b"
+
     # ── Observability ────────────────────────────────────────────────────────
     timezone: str = "UTC"
     log_level: str = "INFO"

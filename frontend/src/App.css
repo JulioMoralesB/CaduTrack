@@ -411,6 +411,13 @@
   color: var(--text-muted);
 }
 
+.settings__section-title {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .form__field--inline {
   flex-direction: row;
   align-items: center;

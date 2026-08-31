@@ -1,4 +1,4 @@
-"""Alert settings request and response schemas."""
+"""Settings request and response schemas."""
 
 from datetime import datetime
 
@@ -26,10 +26,26 @@ class AlertSettingsRead(BaseModel):
     updated_at: datetime
 
 
+class IconSettingsUpdate(BaseModel):
+    """Payload for changing the icon-assignment toggle."""
+
+    ai_enabled: bool
+
+
+class IconSettingsRead(BaseModel):
+    """The icon-assignment toggle as returned by the API."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    ai_enabled: bool
+    updated_at: datetime
+
+
 class SettingsResponse(BaseModel):
     """Everything the settings screen needs."""
 
     alerts: AlertSettingsRead
+    icons: IconSettingsRead
     # Derived from the environment, never the token itself: the UI needs to know
     # whether delivery will work, not what the credential is.
     telegram_configured: bool
@@ -40,3 +56,7 @@ class SettingsResponse(BaseModel):
     # run in the same zone as the input, instead of converting to whatever zone
     # the viewer's device happens to be in.
     timezone: str
+    # Whether the icon model fallback has anywhere to call. The toggle can be
+    # on with this false — e.g. Ollama not configured for this deployment —
+    # the same distinction telegram_configured draws for alerts.
+    ollama_configured: bool
