@@ -32,6 +32,9 @@ function response(overrides: Partial<SettingsResponse> = {}): SettingsResponse {
     // Pinned so the rendered time does not depend on the runner's zone.
     timezone: 'America/Mexico_City',
     ollama_configured: true,
+    // Matches the fallback APP_VERSION resolves to under vitest, where
+    // VITE_APP_VERSION is never set — see version.test.ts for that contract.
+    backend_version: 'dev',
     ...overrides,
   }
 }
@@ -240,5 +243,33 @@ describe('SettingsDialog icon reassignment', () => {
 
     resolveRequest(reassignment())
     await waitFor(() => expect(screen.getByRole('button', { name: 'Reasignar iconos' })).toBeEnabled())
+  })
+})
+
+describe('SettingsDialog version footer', () => {
+  it('shows a single version when frontend and backend agree', async () => {
+    // APP_VERSION resolves to 'dev' under vitest — see version.test.ts.
+    mockedGet.mockResolvedValue(response({ backend_version: 'dev' }))
+
+    renderDialog()
+
+    expect(await screen.findByText('CaduTrack dev')).toBeInTheDocument()
+  })
+
+  it('flags a mismatch instead of silently showing one of the two', async () => {
+    mockedGet.mockResolvedValue(response({ backend_version: 'v0.11.0' }))
+
+    renderDialog()
+
+    const footer = await screen.findByText(/no coinciden/)
+    expect(footer).toHaveTextContent('Frontend dev · API v0.11.0')
+  })
+
+  it('shows the frontend version alone before settings finish loading', () => {
+    mockedGet.mockReturnValue(new Promise(() => {})) // never resolves
+
+    renderDialog()
+
+    expect(screen.getByText('CaduTrack dev')).toBeInTheDocument()
   })
 })

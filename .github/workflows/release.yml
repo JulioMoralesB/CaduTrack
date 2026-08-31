@@ -51,6 +51,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The tag itself, e.g. "v0.11.0" — baked into the bundle so a
+          # deployed instance can say which release it actually is. This
+          # workflow only runs on a tag push, so ref_name is always that tag.
+          build-args: VERSION=${{ github.ref_name }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -106,6 +110,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The tag itself, e.g. "v0.11.0" — read by app/config.py at startup
+          # and surfaced through /health and /settings.
+          build-args: VERSION=${{ github.ref_name }}
           # Separate scope from the frontend, or the two jobs evict each
           # other's layers from the shared Actions cache.
           cache-from: type=gha,scope=backend

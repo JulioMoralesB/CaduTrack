@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Response, status
 
+from app.config import settings
 from app.db.session import check_connection
 
 router = APIRouter()
@@ -18,4 +19,5 @@ async def health(response: Response):
     return {
         "status": "ok" if database_ok else "degraded",
         "database": "ok" if database_ok else "unavailable",
+        "version": settings.app_version,
     }

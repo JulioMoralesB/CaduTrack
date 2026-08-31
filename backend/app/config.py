@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     # what you want when running outside Docker.
     log_file: str = ""
 
+    # ── Meta ─────────────────────────────────────────────────────────────────
+    # The release tag this image was built from, e.g. "v0.11.0" — baked in by
+    # the Dockerfile's VERSION build arg, which only the release workflow sets.
+    # "dev" everywhere else: a local build, `docker compose up -d --build`,
+    # running the app directly. Exposed via /health and /settings so a running
+    # instance can be checked against what was actually deployed, rather than
+    # assumed — nothing in the UI said which version was running until this.
+    app_version: str = "dev"
+
     @property
     def database_url(self) -> str:
         """SQLAlchemy connection URL built from the DB_* settings."""

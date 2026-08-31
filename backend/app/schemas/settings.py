@@ -60,3 +60,7 @@ class SettingsResponse(BaseModel):
     # on with this false — e.g. Ollama not configured for this deployment —
     # the same distinction telegram_configured draws for alerts.
     ollama_configured: bool
+    # The release tag this backend was built from — "dev" outside the release
+    # pipeline. The frontend compares this to its own build-time version, so a
+    # deploy that only updated one image is visible instead of assumed.
+    backend_version: str

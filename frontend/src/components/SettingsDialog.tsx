@@ -6,6 +6,7 @@ import { toErrorMessage } from '@/services/api'
 import { reassignIcons } from '@/services/productsService'
 import { getSettings, saveIconSettings, saveSettings, triggerAlert } from '@/services/settingsService'
 import type { SettingsResponse } from '@/services/types'
+import { APP_VERSION } from '@/version'
 
 interface SettingsDialogProps {
   onClose: () => void
@@ -31,6 +32,22 @@ function formatNextRun(iso: string, timeZone: string): string {
     minute: '2-digit',
     timeZone,
   })
+}
+
+/**
+ * What the version footer should say, and whether it needs the reader's
+ * attention.
+ *
+ * Exists because "¿ya desplegaste v0.11.0?" / "según mí sí" was an actual
+ * exchange this app made possible — nothing anywhere said which version was
+ * running. Comparing the two independently-built images catches the other
+ * failure this same gap allows: a deploy that only pulled one of them.
+ */
+function versionSummary(backendVersion?: string): { text: string; mismatch: boolean } {
+  if (backendVersion === undefined || backendVersion === APP_VERSION) {
+    return { text: `CaduTrack ${APP_VERSION}`, mismatch: false }
+  }
+  return { text: `Frontend ${APP_VERSION} · API ${backendVersion} — no coinciden`, mismatch: true }
 }
 
 /** Alert preferences, the icon-assignment toggle, and a way to check delivery
@@ -136,6 +153,8 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
     })()
   }
 
+  const version = versionSummary(current?.backend_version)
+
   return (
     <Modal title="Ajustes" onClose={onClose}>
       {current === null && !error && <p className="state state--loading">Cargando…</p>}
@@ -225,6 +244,8 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
           {error}
         </p>
       )}
+
+      <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
     </Modal>
   )
 }

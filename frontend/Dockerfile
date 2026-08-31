@@ -7,6 +7,14 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+
+# The release tag this bundle is built from — only the release workflow passes
+# a real value (--build-arg VERSION=${{ github.ref_name }}); a local build
+# stays "dev". Vite inlines VITE_-prefixed env vars into the bundle at build
+# time, which is the only time a static site can pick this up at all.
+ARG VERSION=dev
+ENV VITE_APP_VERSION=${VERSION}
+
 RUN npm run build
 
 # Stage 2: serve the static build with nginx
