@@ -10,6 +10,7 @@ vi.mock('@/services/productsService', () => ({
   replaceProduct: vi.fn(),
   deleteProduct: vi.fn(),
   adjustProductQuantity: vi.fn(),
+  setProductIcon: vi.fn(),
 }))
 
 vi.mock('@/services/categoriesService', () => ({
@@ -36,12 +37,24 @@ function product(overrides: Partial<Product> = {}): Product {
     location: 'fridge',
     notes: null,
     category: null,
+    icon: '\u{1F95B}',
+    icon_source: 'lookup',
     created_at: '2026-08-29T00:00:00Z',
     updated_at: '2026-08-29T00:00:00Z',
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
   }
+}
+
+/**
+ * The product name only, in card order — h2.textContent would also pick up
+ * the icon button now prefixed to it, which these tests were never about.
+ */
+function headingNames(): string[] {
+  return screen
+    .getAllByRole('heading', { level: 2 })
+    .map((heading) => heading.querySelector('.product-card__name-text')?.textContent ?? '')
 }
 
 beforeEach(() => {
@@ -75,8 +88,7 @@ describe('ProductList', () => {
     render(<ProductList />)
 
     await screen.findByText('Yogur')
-    const names = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-    expect(names).toEqual(['Yogur', 'Queso', 'Arroz'])
+    expect(headingNames()).toEqual(['Yogur', 'Queso', 'Arroz'])
   })
 
   it.each([
@@ -277,7 +289,7 @@ describe('filtering and sorting', () => {
 
     fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'pantry' } })
 
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Arroz'])
+    expect(headingNames()).toEqual(['Arroz'])
   })
 
   it('narrows the list by status', async () => {
@@ -288,7 +300,7 @@ describe('filtering and sorting', () => {
 
     fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'expired' } })
 
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Yogur'])
+    expect(headingNames()).toEqual(['Yogur'])
   })
 
   it('combines filters instead of replacing them', async () => {
@@ -300,7 +312,7 @@ describe('filtering and sorting', () => {
     fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'fresh' } })
     fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'freezer' } })
 
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Guisantes'])
+    expect(headingNames()).toEqual(['Guisantes'])
   })
 
   it('reorders by name without refetching', async () => {
@@ -311,7 +323,7 @@ describe('filtering and sorting', () => {
 
     fireEvent.change(screen.getByLabelText('Ordenar por'), { target: { value: 'name' } })
 
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+    expect(headingNames()).toEqual([
       'Arroz',
       'Guisantes',
       'Yogur',

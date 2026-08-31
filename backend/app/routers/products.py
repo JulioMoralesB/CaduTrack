@@ -8,8 +8,15 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
-from app.models import Category, Location, Product
-from app.schemas.product import ProductCreate, ProductQuantityDelta, ProductRead, ProductUpdate
+from app.icons import DEFAULT_ICON, resolve_icon
+from app.models import Category, IconSource, Location, Product
+from app.schemas.product import (
+    ProductCreate,
+    ProductIconUpdate,
+    ProductQuantityDelta,
+    ProductRead,
+    ProductUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +84,18 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> Product:
 
 @router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Product:
-    """Create a product."""
+    """Create a product.
+
+    The icon is assigned here, once, from the local lookup table — never from
+    a value the client sends, since ProductCreate has no icon field. A miss
+    gets DEFAULT_ICON rather than an empty space.
+    """
     _validate_category(db, payload.category_id)
 
-    product = Product(**payload.model_dump())
+    icon = resolve_icon(payload.name)
+    icon_source = IconSource.DEFAULT if icon == DEFAULT_ICON else IconSource.LOOKUP
+
+    product = Product(**payload.model_dump(), icon=icon, icon_source=icon_source)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -142,6 +157,23 @@ def adjust_quantity(
     db.commit()
     db.refresh(product)
     logger.info("Adjusted product %s (%s) quantity by %s", product.id, product.name, payload.delta)
+    return product
+
+
+@router.patch("/{product_id}/icon", response_model=ProductRead)
+def override_icon(product_id: int, payload: ProductIconUpdate, db: Session = Depends(get_db)) -> Product:
+    """Manually set a product's icon.
+
+    The only path that can produce IconSource.MANUAL — nothing automatic runs
+    over a product again after creation, so a manual choice made here is not
+    at risk of being silently reprocessed later.
+    """
+    product = _get_or_404(db, product_id)
+    product.icon = payload.icon
+    product.icon_source = IconSource.MANUAL
+    db.commit()
+    db.refresh(product)
+    logger.info("Set product %s (%s) icon to %r manually", product.id, product.name, payload.icon)
     return product
 
 

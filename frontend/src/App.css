@@ -57,8 +57,32 @@
 }
 
 .product-card__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 1rem;
   font-weight: 600;
+}
+
+.product-card__icon-button {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.product-card__icon-button:hover {
+  /* The global button:hover border colour would be invisible on a borderless
+     button — this stands in as its own hover cue. */
+  transform: scale(1.15);
+}
+
+.product-card__icon-input {
+  width: 2.75rem;
+  padding: 0.15rem;
+  font-size: 1.25rem;
+  text-align: center;
 }
 
 .product-card__meta {

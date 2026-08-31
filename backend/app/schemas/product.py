@@ -6,7 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.expiry import ExpiryStatus, days_until_expiry, expiry_status
-from app.models import Location
+from app.models import IconSource, Location
 from app.schemas.category import CategoryRead
 
 
@@ -35,6 +35,18 @@ class ProductUpdate(ProductBase):
     """
 
 
+class ProductIconUpdate(BaseModel):
+    """Payload for the dedicated manual-icon-override endpoint.
+
+    Its own schema, not a field on ProductUpdate: presence of this payload IS
+    the signal that the choice is manual (see IconSource), and keeping it off
+    the general PUT payload means no other edit can touch it, intentionally or
+    by omission.
+    """
+
+    icon: str = Field(min_length=1, max_length=16)
+
+
 class ProductQuantityDelta(BaseModel):
     """A relative change to a product's quantity.
 
@@ -55,6 +67,13 @@ class ProductRead(ProductBase):
     id: int
     # Nested so the list view can show the category name without a second call.
     category: CategoryRead | None = None
+    # Assigned automatically at creation (see app.icons) and never accepted on
+    # ProductCreate/ProductUpdate — a manual choice goes through the dedicated
+    # PATCH /products/{id}/icon endpoint instead, so an unrelated edit (the
+    # expiry date, the quantity) can never carry an icon change along with it
+    # and can never accidentally clear one.
+    icon: str
+    icon_source: IconSource
     created_at: datetime
     updated_at: datetime
 
