@@ -34,6 +34,22 @@ class Location(StrEnum):
     PANTRY = "pantry"
 
 
+class IconSource(StrEnum):
+    """How a product's icon was decided.
+
+    Without this, "the model guessed 🍎" and "Julio chose 🍎" look identical in
+    the database, and the first time icons are reprocessed a manual choice
+    would be silently overwritten. MANUAL is never touched by anything
+    automatic — see app/routers/products.py's dedicated icon endpoint, which is
+    the only path that can produce it.
+    """
+
+    DEFAULT = "default"
+    LOOKUP = "lookup"
+    AI = "ai"
+    MANUAL = "manual"
+
+
 class Product(Base):
     """A purchased food item with an expiry date."""
 
@@ -44,6 +60,10 @@ class Product(Base):
             name="ck_products_location",
         ),
         CheckConstraint("quantity > 0", name="ck_products_quantity_positive"),
+        CheckConstraint(
+            "icon_source IN ('default', 'lookup', 'ai', 'manual')",
+            name="ck_products_icon_source",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -59,6 +79,10 @@ class Product(Base):
     # Indexed: every list view and the daily alert query sorts or filters on it.
     expires_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     location: Mapped[str] = mapped_column(String(20), nullable=False)
+    # An emoji, chosen without a network call — see app/icons.py. Never null:
+    # an unmatched product gets DEFAULT_ICON rather than an empty space.
+    icon: Mapped[str] = mapped_column(String(16), nullable=False, server_default="\U0001F9FA")
+    icon_source: Mapped[str] = mapped_column(String(10), nullable=False, server_default="default")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

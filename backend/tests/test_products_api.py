@@ -142,12 +142,15 @@ def test_delete_removes_the_product(api_client):
         ("put", "/products/9999"),
         ("delete", "/products/9999"),
         ("patch", "/products/9999/quantity"),
+        ("patch", "/products/9999/icon"),
     ],
 )
 def test_missing_product_is_404(api_client, method, path):
     kwargs: dict = {"json": _product()} if method == "put" else {}
-    if method == "patch":
+    if method == "patch" and path.endswith("/quantity"):
         kwargs = {"json": {"delta": "-1"}}
+    elif method == "patch" and path.endswith("/icon"):
+        kwargs = {"json": {"icon": "\U0001F34C"}}
     assert getattr(api_client, method)(path, **kwargs).status_code == 404
 
 
@@ -283,3 +286,62 @@ def test_concurrent_decrements_do_not_lose_an_update(api_client):
     assert not errors, errors
     expected = Decimal("100.00") - rounds * 2
     assert api_client.get(f"/products/{product_id}").json()["quantity"] == f"{expected:.2f}"
+
+
+def test_creating_a_product_assigns_an_icon_from_the_local_table(api_client):
+    response = api_client.post("/products", json=_product(name="Plátano"))
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["icon"] == "\U0001F34C"
+    assert body["icon_source"] == "lookup"
+
+
+def test_an_unmatched_name_gets_the_default_icon(api_client):
+    response = api_client.post("/products", json=_product(name="Sultán ácido muriático"))
+
+    body = response.json()
+    assert body["icon"] == "\U0001F9FA"
+    assert body["icon_source"] == "default"
+
+
+def test_replacing_a_product_never_touches_its_icon(api_client):
+    """PUT has no icon field at all — this is what actually enforces #85's
+    'a manual override survives being edited', not a special case in the
+    handler that could later be edited away by accident."""
+    created = api_client.post("/products", json=_product(name="Plátano")).json()
+
+    api_client.patch(f"/products/{created['id']}/icon", json={"icon": "\U0001F34E"})
+    replaced = api_client.put(f"/products/{created['id']}", json=_product(name="Plátano macho")).json()
+
+    assert replaced["icon"] == "\U0001F34E"
+    assert replaced["icon_source"] == "manual"
+
+
+def test_manually_overriding_the_icon(api_client):
+    product_id = api_client.post("/products", json=_product(name="Plátano")).json()["id"]
+
+    response = api_client.patch(f"/products/{product_id}/icon", json={"icon": "\U0001F34E"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["icon"] == "\U0001F34E"
+    assert body["icon_source"] == "manual"
+
+
+def test_a_second_manual_override_replaces_the_first(api_client):
+    product_id = api_client.post("/products", json=_product(name="Plátano")).json()["id"]
+
+    api_client.patch(f"/products/{product_id}/icon", json={"icon": "\U0001F34E"})
+    second = api_client.patch(f"/products/{product_id}/icon", json={"icon": "\U0001F34D"})
+
+    assert second.json()["icon"] == "\U0001F34D"
+    assert second.json()["icon_source"] == "manual"
+
+
+def test_an_empty_icon_is_rejected(api_client):
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+
+    response = api_client.patch(f"/products/{product_id}/icon", json={"icon": ""})
+
+    assert response.status_code == 422

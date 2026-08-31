@@ -137,7 +137,7 @@ export function ProductList() {
                   product={product}
                   onEdit={(target) => setDialog({ kind: 'edit', product: target })}
                   onDelete={(target) => setDialog({ kind: 'delete', product: target })}
-                  onQuantityChanged={replaceProduct}
+                  onProductChanged={replaceProduct}
                 />
               ))}
             </ul>

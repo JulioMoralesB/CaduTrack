@@ -72,3 +72,12 @@ export async function adjustProductQuantity(id: number, delta: number): Promise<
   const { data } = await withRetry(() => api.patch<Product>(`/products/${id}/quantity`, { delta }))
   return data
 }
+
+/**
+ * Manually set a product's icon. The only call that can produce
+ * icon_source: 'manual' — see the backend endpoint's own docstring.
+ */
+export async function setProductIcon(id: number, icon: string): Promise<Product> {
+  const { data } = await withRetry(() => api.patch<Product>(`/products/${id}/icon`, { icon }))
+  return data
+}

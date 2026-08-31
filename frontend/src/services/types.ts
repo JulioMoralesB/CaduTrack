@@ -12,6 +12,9 @@ export interface Category {
   created_at: string
 }
 
+/** How a product's icon was decided. See backend/app/models/product.py. */
+export type IconSource = 'default' | 'lookup' | 'ai' | 'manual'
+
 export interface Product {
   id: number
   name: string
@@ -23,6 +26,10 @@ export interface Product {
   location: Location
   notes: string | null
   category: Category | null
+  /** An emoji. Assigned automatically at creation; never sent on create/replace
+   *  — change it with setProductIcon, the only path that can produce 'manual'. */
+  icon: string
+  icon_source: IconSource
   created_at: string
   updated_at: string
   /** Negative once expired. */
@@ -39,7 +46,7 @@ export interface ProductFilters {
 
 export type ProductPayload = Omit<
   Product,
-  'id' | 'category' | 'created_at' | 'updated_at' | 'days_until_expiry' | 'status'
+  'id' | 'category' | 'icon' | 'icon_source' | 'created_at' | 'updated_at' | 'days_until_expiry' | 'status'
 >
 
 export interface AlertSettings {
