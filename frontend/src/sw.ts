@@ -39,6 +39,15 @@ const stampCacheDate = {
   cacheWillUpdate: async ({ response }: { response: Response }) => {
     if (response.status !== 200) return null
 
+    // A 200 is not enough once anything sits between the app and the API.
+    // Cloudflare Access answers an expired session with its login page — a
+    // perfectly ordinary 200 text/html — which would replace the product list
+    // in the cache and then be served, as the product list, on every later
+    // offline open. Requiring JSON keeps anything a proxy invents out.
+    if (!response.headers.get('content-type')?.includes('application/json')) {
+      return null
+    }
+
     const headers = new Headers(response.headers)
     headers.set(CACHED_AT, new Date().toISOString())
     return new Response(await response.clone().blob(), {
