@@ -201,7 +201,18 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
             Cancelar
           </button>
           <button type="submit" className="button--primary" disabled={saving}>
-            {saving ? 'Guardando…' : 'Guardar'}
+            {saving ? (
+              <>
+                {/* Stays up across the whole retry sequence, because `saving`
+                    is only cleared once withRetry settles. A dropped
+                    connection is exactly when a still-disabled button with no
+                    motion reads as a hang. */}
+                <span className="spinner" aria-hidden="true" />
+                Guardando…
+              </>
+            ) : (
+              'Guardar'
+            )}
           </button>
         </div>
       </form>
