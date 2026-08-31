@@ -1,5 +1,6 @@
 """Configuration and structured-logging tests."""
 
+import io
 import json
 import logging
 
@@ -141,3 +142,50 @@ def test_the_ansi_copy_uvicorn_attaches_is_dropped():
     record.color_message = "Started server process [\x1b[36m%d\x1b[0m]"
 
     assert "color_message" not in json.loads(formatter.format(record))
+
+
+def test_the_http_client_cannot_publish_the_bot_token():
+    """Regression guard for #64.
+
+    httpx logs every request URL at INFO, and the Telegram Bot API carries the
+    token in the path — so a delivered alert used to write the credential into
+    the log store. Nothing in this service's own code had to be wrong for that
+    to happen, which is why it needs a test rather than care.
+
+    Captured through a handler attached here rather than via capsys: the real
+    handler holds the stderr it was given at setup, which pytest's capture does
+    not intercept — an earlier version of this test passed with the fix removed.
+    """
+    configure_framework_loggers()
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(_JsonFormatter(fmt="%(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    previous_level = root.level
+    root.setLevel(logging.DEBUG)
+
+    fake_token = "8670436717:AAG67gC_ue0EdBGryoKJN4oY6nILucfRMrM"
+    try:
+        logging.getLogger("httpx").info(
+            'HTTP Request: POST https://api.telegram.org/bot%s/sendMessage "HTTP/1.1 200 OK"',
+            fake_token,
+        )
+        logging.getLogger("httpcore").info("connect_tcp.started host='api.telegram.org'")
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(previous_level)
+
+    assert fake_token not in stream.getvalue()
+    # The mechanism, asserted directly: the record is never created at all.
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+
+
+def test_a_real_problem_from_the_http_client_still_gets_through():
+    """Silencing INFO must not silence failures."""
+    configure_framework_loggers()
+
+    assert logging.getLogger("httpx").isEnabledFor(logging.WARNING)
+    assert logging.getLogger("httpx").isEnabledFor(logging.ERROR)
