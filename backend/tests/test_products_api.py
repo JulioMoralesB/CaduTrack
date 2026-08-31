@@ -1,6 +1,8 @@
 """Product endpoint tests."""
 
+import threading
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -133,10 +135,72 @@ def test_delete_removes_the_product(api_client):
     assert api_client.get("/products").json() == []
 
 
-@pytest.mark.parametrize("method,path", [("get", "/products/9999"), ("put", "/products/9999"), ("delete", "/products/9999")])
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("get", "/products/9999"),
+        ("put", "/products/9999"),
+        ("delete", "/products/9999"),
+        ("patch", "/products/9999/quantity"),
+    ],
+)
 def test_missing_product_is_404(api_client, method, path):
-    kwargs = {"json": _product()} if method == "put" else {}
+    kwargs: dict = {"json": _product()} if method == "put" else {}
+    if method == "patch":
+        kwargs = {"json": {"delta": "-1"}}
     assert getattr(api_client, method)(path, **kwargs).status_code == 404
+
+
+def test_quantity_increments(api_client):
+    product_id = api_client.post("/products", json=_product(quantity="2.00")).json()["id"]
+
+    response = api_client.patch(f"/products/{product_id}/quantity", json={"delta": "1"})
+
+    assert response.status_code == 200
+    assert response.json()["quantity"] == "3.00"
+
+
+def test_two_rapid_decrements_land_on_three_not_four(api_client):
+    """The composition guarantee #82 exists for: sent as two deltas, not two
+    absolute values, so neither tap is lost regardless of ordering."""
+    product_id = api_client.post("/products", json=_product(quantity="5.00")).json()["id"]
+
+    api_client.patch(f"/products/{product_id}/quantity", json={"delta": "-1"})
+    second = api_client.patch(f"/products/{product_id}/quantity", json={"delta": "-1"})
+
+    assert second.json()["quantity"] == "3.00"
+
+
+def test_a_fractional_quantity_steps_without_being_rounded(api_client):
+    """Numeric(10, 2) is the real precision boundary — not 0 decimal places —
+    so a purchase already carrying cents must keep them exactly after a step."""
+    product_id = api_client.post("/products", json=_product(quantity="0.59")).json()["id"]
+
+    response = api_client.patch(f"/products/{product_id}/quantity", json={"delta": "1"})
+
+    assert response.json()["quantity"] == "1.59"
+
+
+def test_decrementing_below_zero_is_rejected_without_a_500(api_client):
+    product_id = api_client.post("/products", json=_product(quantity="1.00")).json()["id"]
+
+    response = api_client.patch(f"/products/{product_id}/quantity", json={"delta": "-1"})
+
+    assert response.status_code == 422
+    assert "non-positive" in response.json()["detail"]
+    # Rejected, not partially applied.
+    assert api_client.get(f"/products/{product_id}").json()["quantity"] == "1.00"
+
+
+def test_decrementing_past_zero_is_rejected_the_same_way(api_client):
+    """The guard is quantity + delta > 0, not merely != 0 — a delta larger than
+    the current quantity must be caught too, not wrap or go negative."""
+    product_id = api_client.post("/products", json=_product(quantity="1.00")).json()["id"]
+
+    response = api_client.patch(f"/products/{product_id}/quantity", json={"delta": "-5"})
+
+    assert response.status_code == 422
+    assert api_client.get(f"/products/{product_id}").json()["quantity"] == "1.00"
 
 
 def test_response_carries_days_until_expiry_and_status(api_client):
@@ -168,3 +232,54 @@ def test_a_product_expiring_today_is_not_shown_as_expired(api_client):
     product = api_client.get("/products").json()[0]
     assert product["days_until_expiry"] == 0
     assert product["status"] == "expiring_soon"
+
+
+def test_concurrent_decrements_do_not_lose_an_update(api_client):
+    """Proves the atomic UPDATE, not just the sequential test above — by
+    calling the real endpoint function, not a hand-rolled copy of its SQL.
+
+    An earlier version of this test wrote its own raw UPDATE statement inside
+    the thread target instead of calling `adjust_quantity`. It passed even
+    with the endpoint reverted to a read-then-write implementation, because it
+    was proving a fact about Postgres in the abstract, not about this code —
+    the exact failure this project's testing conventions exist to catch. If
+    two concurrent calls read quantity=N before either commits and each
+    computes N-1 in Python, both write N-1 and one decrement vanishes; only a
+    SET clause evaluated against the row's live value at UPDATE time — not a
+    Python-computed constant — avoids it.
+
+    Racing two threads once is real but timing-dependent: on a fast local
+    database the two calls might not truly overlap on a given run, so a buggy
+    implementation could pass by luck. Racing 20 rounds turns "might overlap"
+    into "will overlap at least once", so a genuine lost-update bug reliably
+    shows up in the final total rather than depending on a single roll.
+    """
+    from app.db.session import SessionLocal
+    from app.routers.products import adjust_quantity
+    from app.schemas.product import ProductQuantityDelta
+
+    rounds = 20
+    product_id = api_client.post("/products", json=_product(quantity="100.00")).json()["id"]
+    errors: list[BaseException] = []
+
+    def decrement_via_own_session(start: threading.Barrier) -> None:
+        session = SessionLocal()
+        try:
+            start.wait(timeout=5)
+            adjust_quantity(product_id, ProductQuantityDelta(delta=Decimal("-1")), session)
+        except BaseException as exc:  # noqa: BLE001 - surfaced on the main thread below
+            errors.append(exc)
+        finally:
+            session.close()
+
+    for _ in range(rounds):
+        barrier = threading.Barrier(2)
+        threads = [threading.Thread(target=decrement_via_own_session, args=(barrier,)) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+    assert not errors, errors
+    expected = Decimal("100.00") - rounds * 2
+    assert api_client.get(f"/products/{product_id}").json()["quantity"] == f"{expected:.2f}"

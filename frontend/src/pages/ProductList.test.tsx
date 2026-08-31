@@ -9,6 +9,7 @@ vi.mock('@/services/productsService', () => ({
   createProduct: vi.fn(),
   replaceProduct: vi.fn(),
   deleteProduct: vi.fn(),
+  adjustProductQuantity: vi.fn(),
 }))
 
 vi.mock('@/services/categoriesService', () => ({

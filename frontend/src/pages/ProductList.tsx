@@ -30,7 +30,7 @@ type Dialog =
 
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
-  const { products, loading, error, cachedAt, reload } = useProducts()
+  const { products, loading, error, cachedAt, reload, replaceProduct } = useProducts()
   const categories = useCategories()
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' })
   const [deleting, setDeleting] = useState(false)
@@ -137,6 +137,7 @@ export function ProductList() {
                   product={product}
                   onEdit={(target) => setDialog({ kind: 'edit', product: target })}
                   onDelete={(target) => setDialog({ kind: 'delete', product: target })}
+                  onQuantityChanged={replaceProduct}
                 />
               ))}
             </ul>

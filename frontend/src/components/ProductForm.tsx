@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { LOCATION_LABELS } from '@/labels'
+import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
 import { createProduct, replaceProduct } from '@/services/productsService'
 import type { Category, Location, Product, ProductPayload } from '@/services/types'
@@ -150,17 +151,42 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
         </label>
 
         <div className="form__row">
-          <label className="form__field">
-            <span>Cantidad</span>
-            <input
-              type="number"
-              value={form.quantity}
-              onChange={(event) => update('quantity', event.target.value)}
-              min="0.01"
-              step="0.01"
-              required
-            />
-          </label>
+          {/* A plain wrapping <label> would implicitly associate its text with
+              every control inside it — both buttons as well as the input —
+              which makes getByLabelText('Cantidad') ambiguous. An explicit
+              htmlFor targets the input alone. */}
+          <div className="form__field">
+            <label htmlFor="product-quantity">Cantidad</label>
+            <span className="quantity-stepper">
+              <button
+                type="button"
+                className="quantity-stepper__button"
+                onClick={() => update('quantity', stepQuantity(form.quantity, -1))}
+                disabled={!canStepDown(form.quantity)}
+                aria-label="Reducir cantidad"
+              >
+                −
+              </button>
+              <input
+                id="product-quantity"
+                type="number"
+                className="quantity-stepper__input"
+                value={form.quantity}
+                onChange={(event) => update('quantity', event.target.value)}
+                min="0.01"
+                step="0.01"
+                required
+              />
+              <button
+                type="button"
+                className="quantity-stepper__button"
+                onClick={() => update('quantity', stepQuantity(form.quantity, 1))}
+                aria-label="Aumentar cantidad"
+              >
+                +
+              </button>
+            </span>
+          </div>
 
           <label className="form__field">
             <span>Unidad</span>

@@ -58,3 +58,17 @@ export async function replaceProduct(id: number, payload: ProductPayload): Promi
 export async function deleteProduct(id: number): Promise<void> {
   await api.delete(`/products/${id}`)
 }
+
+/**
+ * Adjust a product's quantity by a relative amount — never an absolute value,
+ * so two taps racing on a slow connection compose correctly regardless of
+ * arrival order. See the backend's ProductQuantityDelta and #82.
+ *
+ * Retried on the same terms as createProduct/replaceProduct: a stepper button
+ * is tapped from a phone near the fridge, exactly the situation #81 was
+ * written for, so a dropped-connection tap deserves the same second chance.
+ */
+export async function adjustProductQuantity(id: number, delta: number): Promise<Product> {
+  const { data } = await withRetry(() => api.patch<Product>(`/products/${id}/quantity`, { delta }))
+  return data
+}

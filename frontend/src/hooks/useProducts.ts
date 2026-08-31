@@ -11,6 +11,16 @@ interface UseProductsResult {
   /** Set when the list came from the offline cache rather than the network. */
   cachedAt: Date | null
   reload: () => void
+  /**
+   * Splice one already-saved product back into the list from its own server
+   * response, in place of a full reload.
+   *
+   * Built for the quantity stepper: a full `reload()` after every +/- tap
+   * would refetch the whole list — and briefly show a stale sort order, since
+   * a product's position depends on `expires_at`, not quantity — for a change
+   * that only ever touches one row and one field.
+   */
+  replaceProduct: (updated: Product) => void
 }
 
 /**
@@ -87,5 +97,10 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     }
   }, [])
 
-  return { products, loading, error, cachedAt, reload }
+  // An event handler, not an effect — same reasoning as reload above.
+  const replaceProduct = useCallback((updated: Product) => {
+    setProducts((current) => current.map((product) => (product.id === updated.id ? updated : product)))
+  }, [])
+
+  return { products, loading, error, cachedAt, reload, replaceProduct }
 }
