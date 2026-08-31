@@ -111,14 +111,13 @@ class _AccessLogFilter(logging.Filter):
 
 
 def configure_framework_loggers() -> None:
-    """Make uvicorn's and alembic's loggers use our handlers.
+    """Make uvicorn's and alembic's loggers use our handlers, and quieten httpx.
 
-    Both ship their own handlers and formatters, which is how roughly half of
-    this service's output — every request line, startup message and migration —
-    used to leave as plain text while the application's own lines were JSON.
-
-    Clearing their handlers and letting them propagate puts everything through
-    the root handler configured above, so one format covers the whole stream.
+    uvicorn and alembic ship their own handlers and formatters, which is how
+    roughly half of this service's output — every request line, startup message
+    and migration — used to leave as plain text while the application's own
+    lines were JSON. Clearing their handlers and letting them propagate puts
+    everything through the root handler configured above.
     """
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "alembic", "alembic.runtime.migration"):
         logger = logging.getLogger(name)
@@ -126,6 +125,13 @@ def configure_framework_loggers() -> None:
         logger.propagate = True
 
     logging.getLogger("uvicorn.access").addFilter(_AccessLogFilter())
+
+    # httpx logs every request at INFO, including the full URL. The Telegram Bot
+    # API puts the token in the path, so that line published the bot credential
+    # to the log store on every alert. Nothing in it is worth keeping: the app
+    # already logs its own delivery result, without the URL.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def setup_logging(timezone: str = "UTC", log_file: str | None = None, level: str = "INFO") -> None:
