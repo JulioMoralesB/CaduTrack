@@ -21,11 +21,14 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# A short text completion on an already-loaded model, not the multi-second
-# image encode #83/#84 measured — but generous enough that a momentarily busy
-# GPU doesn't manufacture a spurious miss. Long enough to be worth it, short
-# enough that a genuinely unreachable Ollama does not stall product creation.
-TIMEOUT_SECONDS = 8.0
+# Measured directly against the real server, not guessed: a warm qwen3.5:4b
+# answers this prompt in ~0.7-1.0s, but the model is shared with Karakeep and
+# gets evicted after a few idle minutes — a cold reload alone took 6.7s in
+# one measurement, 7.5s total for the same call that took under a second
+# warm. 8s left under 500ms of margin over that single sample; 15s gives the
+# reload real room without leaving a genuinely unreachable Ollama able to
+# stall product creation for long.
+TIMEOUT_SECONDS = 15.0
 
 # Structured output, not "please reply with just the emoji": a free-text
 # prompt reliably came back wrapped in markdown fences or a sentence during
@@ -40,6 +43,10 @@ _PROMPT_TEMPLATE = (
     "Da un solo emoji que represente mejor este producto de supermercado. "
     'Responde solo el emoji, sin texto adicional.\n\nProducto: "{name}"'
 )
+
+# Straight and curly quote marks, colons and backticks — the characters
+# actually observed stuck to an otherwise-correct emoji in real responses.
+_STRAY_CHARS = "\"'‘’“”`:"
 
 
 def resolve_icon_via_model(name: str) -> str | None:
@@ -68,7 +75,14 @@ def resolve_icon_via_model(name: str) -> str | None:
 
     try:
         raw = response.json()["response"]
-        icon = json.loads(raw)["icon"].strip()
+        icon = json.loads(raw)["icon"]
+        # Observed directly against the real server, not a defensive guess:
+        # roughly one answer in eight arrived with a stray colon or curly
+        # quote stuck to the emoji despite the schema — e.g. ':🥭' and
+        # '🍖"\n'. .strip() alone only removes whitespace, so a first pass
+        # strips it, then the punctuation, then whitespace again in case
+        # that exposed more of it (e.g. "🍖 ” ").
+        icon = icon.strip().strip(_STRAY_CHARS).strip()
     except (KeyError, TypeError, ValueError) as exc:
         logger.warning(
             "Ollama returned an unparsable icon response for %r (%s): %r",

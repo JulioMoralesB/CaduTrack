@@ -6,6 +6,8 @@ creation over a missing emoji, which is exactly what this module exists to
 prevent.
 """
 
+import json
+
 import httpx
 import pytest
 
@@ -23,10 +25,19 @@ def ollama_configured(monkeypatch):
 
 def _ok_response(icon: str) -> httpx.Response:
     """What Ollama sends back: `response` is a *string* holding JSON text
-    that itself matches the requested schema — not a nested JSON object."""
+    that itself matches the requested schema — not a nested JSON object.
+
+    Built with a real json.dumps for that inner layer, not an f-string: a
+    raw newline embedded via string interpolation produces literally invalid
+    JSON (control characters must be escaped inside a JSON string), which a
+    real, correctly-behaving Ollama would never emit — grammar-constrained
+    decoding is what makes `format` reliable in the first place. An f-string
+    version of this fixture failed on exactly that case, for a reason that
+    was about the fixture, not app/ollama_client.py.
+    """
     return httpx.Response(
         status_code=200,
-        json={"model": "qwen3.5:4b", "response": f'{{"icon": "{icon}"}}', "done": True},
+        json={"model": "qwen3.5:4b", "response": json.dumps({"icon": icon}), "done": True},
         request=_REQUEST,
     )
 
@@ -104,6 +115,23 @@ def test_returns_none_for_an_empty_icon(mocker):
     mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response(""))
 
     assert resolve_icon_via_model("Kombucha") is None
+
+
+def test_strips_a_stray_leading_colon(mocker):
+    """Reproduced directly against the real server: ':🥭' for "Papaya
+    deshidratada", the schema notwithstanding. .strip() alone leaves the
+    colon in place — only whitespace is whitespace."""
+    mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response(":🥭"))
+
+    assert resolve_icon_via_model("Papaya deshidratada") == "🥭"
+
+
+def test_strips_a_stray_trailing_curly_quote_and_newline(mocker):
+    """Also reproduced directly: '🍖”\n' for the same prompt on a different
+    sample — the newline .strip() catches, the curly quote it does not."""
+    mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response("🍖”\n"))
+
+    assert resolve_icon_via_model("Milanesa") == "🍖"
 
 
 def test_returns_none_for_an_icon_too_long_to_store(mocker):
