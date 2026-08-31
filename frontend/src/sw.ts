@@ -59,13 +59,12 @@ const stampCacheDate = {
  * situations are the same thing, and the last known list beats both.
  */
 const treatServerErrorsAsOffline = {
-  // Not async: there is nothing to await, and Workbox awaits whatever it gets.
-  fetchDidSucceed: ({ response }: { response: Response }) => {
-    if (response.status >= 500) {
-      throw new Error(`Upstream returned ${response.status}`)
-    }
-    return response
-  },
+  // Returns promises explicitly rather than being async: WorkboxPlugin types
+  // this as Promise<Response>, and there is nothing here to await.
+  fetchDidSucceed: ({ response }: { response: Response }) =>
+    response.status >= 500
+      ? Promise.reject(new Error(`Upstream returned ${response.status}`))
+      : Promise.resolve(response),
 }
 
 registerRoute(
