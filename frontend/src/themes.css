@@ -1,0 +1,180 @@
+/* Themes.
+ *
+ * Two blocks per theme, keyed on the resolved mode. `auto` is turned into
+ * light or dark in JavaScript before paint (see src/theme.ts), so no palette
+ * appears twice here — a media-query copy plus a forced-mode copy would be two
+ * sets of values to drift apart.
+ *
+ * Every theme declares its own status colours. They are semantic, not
+ * decorative: green, amber and red carry the meaning of the whole app, and a
+ * palette that leaves them indistinguishable or poorly contrasted against its
+ * own surface breaks the product rather than restyling it.
+ */
+
+[data-theme="bosque"][data-mode="light"] {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --text: #1c1f1a;
+  --text-muted: #5f6b5a;
+  --border: #dfe3db;
+  --accent: #3f7d3a;
+  --danger: #b03434;
+  --on-fill: #ffffff;
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03434;
+}
+
+[data-theme="bosque"][data-mode="dark"] {
+  --bg: #14170f;
+  --surface: #1e221a;
+  --text: #eef1e9;
+  --text-muted: #a3ac9c;
+  --border: #333a2d;
+  --accent: #8fc98a;
+  --danger: #e08585;
+  --on-fill: #14170f;
+  --status-fresh: #7fbf7a;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e08585;
+}
+
+[data-theme="pizarra"][data-mode="light"] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1a202c;
+  --text-muted: #5a6577;
+  --border: #dde1e7;
+  --accent: #4a5568;
+  --danger: #b03434;
+  --on-fill: #ffffff;
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03434;
+}
+
+[data-theme="pizarra"][data-mode="dark"] {
+  --bg: #12151a;
+  --surface: #1c2027;
+  --text: #e8eaee;
+  --text-muted: #9aa3b2;
+  --border: #2c323c;
+  --accent: #a3b1c6;
+  --danger: #e08585;
+  --on-fill: #12151a;
+  --status-fresh: #7fbf7a;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e08585;
+}
+
+[data-theme="oceano"][data-mode="light"] {
+  --bg: #f2f6fa;
+  --surface: #ffffff;
+  --text: #16232e;
+  --text-muted: #546a7d;
+  --border: #d6e2ec;
+  --accent: #2b6cb0;
+  --danger: #b03434;
+  --on-fill: #ffffff;
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03434;
+}
+
+[data-theme="oceano"][data-mode="dark"] {
+  --bg: #0e1620;
+  --surface: #16212d;
+  --text: #e6eef6;
+  --text-muted: #93a8bb;
+  --border: #26364a;
+  --accent: #7fb5e6;
+  --danger: #e08585;
+  --on-fill: #0e1620;
+  --status-fresh: #6fc48a;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e89090;
+}
+
+[data-theme="arena"][data-mode="light"] {
+  --bg: #faf6ef;
+  --surface: #fffdf9;
+  --text: #2a2118;
+  --text-muted: #6f6152;
+  --border: #e8ded0;
+  --accent: #a9662a;
+  --danger: #a83232;
+  --on-fill: #fffdf9;
+  --status-fresh: #3f7d32;
+  --status-expiring-soon: #8a5a06;
+  --status-expired: #a83232;
+}
+
+[data-theme="arena"][data-mode="dark"] {
+  --bg: #1a1611;
+  --surface: #241f18;
+  --text: #f0e9df;
+  --text-muted: #ada197;
+  --border: #3a3229;
+  --accent: #d9a066;
+  --danger: #e08585;
+  --on-fill: #1a1611;
+  --status-fresh: #8cc47f;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e89090;
+}
+
+[data-theme="ciruela"][data-mode="light"] {
+  --bg: #f8f4fa;
+  --surface: #ffffff;
+  --text: #241a29;
+  --text-muted: #6b5c74;
+  --border: #e6dcec;
+  --accent: #7a3f8f;
+  --danger: #b03452;
+  --on-fill: #ffffff;
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03452;
+}
+
+[data-theme="ciruela"][data-mode="dark"] {
+  --bg: #16101a;
+  --surface: #201826;
+  --text: #efe7f3;
+  --text-muted: #a99bb2;
+  --border: #342a3c;
+  --accent: #c193d4;
+  --danger: #e88ba0;
+  --on-fill: #16101a;
+  --status-fresh: #7fbf7a;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e88ba0;
+}
+
+[data-theme="contraste"][data-mode="light"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --text: #000000;
+  --text-muted: #3a3a3a;
+  --border: #000000;
+  --accent: #0000cc;
+  --danger: #c00000;
+  --on-fill: #ffffff;
+  --status-fresh: #006600;
+  --status-expiring-soon: #8a4b00;
+  --status-expired: #c00000;
+}
+
+[data-theme="contraste"][data-mode="dark"] {
+  --bg: #000000;
+  --surface: #000000;
+  --text: #ffffff;
+  --text-muted: #d0d0d0;
+  --border: #ffffff;
+  --accent: #7ab8ff;
+  --danger: #ff8080;
+  --on-fill: #000000;
+  --status-fresh: #5ce65c;
+  --status-expiring-soon: #ffc14d;
+  --status-expired: #ff8080;
+}

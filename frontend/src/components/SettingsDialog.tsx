@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
+import { ThemePicker } from '@/components/ThemePicker'
 import { toErrorMessage } from '@/services/api'
 import { getSettings, saveSettings, triggerAlert } from '@/services/settingsService'
 import type { SettingsResponse } from '@/services/types'
@@ -95,6 +96,8 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   return (
     <Modal title="Ajustes de alertas" onClose={onClose}>
       {current === null && !error && <p className="state state--loading">Cargando…</p>}
+
+      <ThemePicker />
 
       {current !== null && (
         <form className="form" onSubmit={handleSubmit}>
