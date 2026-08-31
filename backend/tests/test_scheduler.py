@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from app.config import settings
-from app.scheduler import JOB_ID, parse_alert_time, run_daily_alert, shutdown_scheduler, start_scheduler
+from app.scheduler import JOB_ID, run_daily_alert, shutdown_scheduler, start_scheduler
+from app.settings_store import parse_alert_time
 
 
 @pytest.fixture(autouse=True)
@@ -39,11 +40,14 @@ def test_nothing_is_scheduled_without_telegram(monkeypatch):
     assert start_scheduler() is None
 
 
-def test_the_job_is_registered_at_the_configured_time(monkeypatch):
+@pytest.mark.integration
+def test_the_job_is_registered_at_the_configured_time(db_session, monkeypatch):
+    from app.settings_store import update
+
     monkeypatch.setattr(settings, "telegram_bot_token", "token")
     monkeypatch.setattr(settings, "telegram_chat_id", "chat")
-    monkeypatch.setattr(settings, "alert_time", "06:30")
     monkeypatch.setattr(settings, "timezone", "America/Mexico_City")
+    update(db_session, enabled=True, alert_time="06:30", days_ahead=7)
 
     scheduler = start_scheduler()
 
@@ -55,16 +59,19 @@ def test_the_job_is_registered_at_the_configured_time(monkeypatch):
     assert "Mexico_City" in str(job.next_run_time.tzinfo)
 
 
-def test_a_bad_time_stops_startup_rather_than_guessing(monkeypatch):
-    monkeypatch.setattr(settings, "telegram_bot_token", "token")
-    monkeypatch.setattr(settings, "telegram_chat_id", "chat")
+@pytest.mark.integration
+def test_a_bad_time_in_the_environment_stops_seeding(db_session, monkeypatch):
+    """A malformed ALERT_TIME should name itself, not surface as a CHECK violation."""
+    from app.settings_store import get_or_create
+
     monkeypatch.setattr(settings, "alert_time", "media noche")
 
-    with pytest.raises(ValueError):
-        start_scheduler()
+    with pytest.raises(ValueError, match="HH:MM"):
+        get_or_create(db_session)
 
 
-def test_missed_runs_collapse_instead_of_firing_a_burst(monkeypatch):
+@pytest.mark.integration
+def test_missed_runs_collapse_instead_of_firing_a_burst(db_session, monkeypatch):
     """A container down for a day should deliver once on return, not repeatedly."""
     monkeypatch.setattr(settings, "telegram_bot_token", "token")
     monkeypatch.setattr(settings, "telegram_chat_id", "chat")

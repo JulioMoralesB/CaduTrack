@@ -41,3 +41,27 @@ export type ProductPayload = Omit<
   Product,
   'id' | 'category' | 'created_at' | 'updated_at' | 'days_until_expiry' | 'status'
 >
+
+export interface AlertSettings {
+  enabled: boolean
+  /** HH:MM in the server's configured timezone. */
+  alert_time: string
+  days_ahead: number
+  updated_at: string
+}
+
+export interface SettingsResponse {
+  alerts: AlertSettings
+  /** Derived from the server's environment. The token itself is never sent. */
+  telegram_configured: boolean
+  /** ISO timestamp, or null when nothing is scheduled. */
+  next_run_at: string | null
+}
+
+export type AlertSettingsPayload = Pick<AlertSettings, 'enabled' | 'alert_time' | 'days_ahead'>
+
+export interface AlertTriggerResult {
+  sent: boolean
+  products: number
+  detail: string
+}
