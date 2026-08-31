@@ -52,7 +52,7 @@ beforeEach(() => {
 
 describe('ProductList', () => {
   it('renders each product with its details', async () => {
-    mockedList.mockResolvedValue([product()])
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
 
     render(<ProductList />)
 
@@ -65,11 +65,11 @@ describe('ProductList', () => {
   })
 
   it('keeps the order the API returned rather than re-sorting', async () => {
-    mockedList.mockResolvedValue([
+    mockedList.mockResolvedValue({ products: [
       product({ id: 1, name: 'Yogur', days_until_expiry: 1 }),
       product({ id: 2, name: 'Queso', days_until_expiry: 4 }),
       product({ id: 3, name: 'Arroz', days_until_expiry: 90, status: 'fresh' }),
-    ])
+    ], cachedAt: null })
 
     render(<ProductList />)
 
@@ -83,7 +83,7 @@ describe('ProductList', () => {
     ['expiring_soon' as const, 3],
     ['expired' as const, -2],
   ])('marks a %s card so the list can be scanned by colour', async (status, days) => {
-    mockedList.mockResolvedValue([product({ status, days_until_expiry: days })])
+    mockedList.mockResolvedValue({ products: [product({ status, days_until_expiry: days })], cachedAt: null })
 
     render(<ProductList />)
 
@@ -92,7 +92,7 @@ describe('ProductList', () => {
   })
 
   it('labels a product with no category instead of leaving a gap', async () => {
-    mockedList.mockResolvedValue([product({ category: null })])
+    mockedList.mockResolvedValue({ products: [product({ category: null })], cachedAt: null })
 
     render(<ProductList />)
 
@@ -100,7 +100,7 @@ describe('ProductList', () => {
   })
 
   it('invites the user to start when there is nothing yet', async () => {
-    mockedList.mockResolvedValue([])
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
 
     render(<ProductList />)
 
@@ -119,7 +119,7 @@ describe('ProductList', () => {
 
 describe('creating a product', () => {
   it('sends the form and reloads the list', async () => {
-    mockedList.mockResolvedValue([])
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
     mockedCreate.mockResolvedValue(product())
 
     render(<ProductList />)
@@ -147,7 +147,7 @@ describe('creating a product', () => {
   })
 
   it('sends empty optional fields as null rather than empty strings', async () => {
-    mockedList.mockResolvedValue([])
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
     mockedCreate.mockResolvedValue(product())
 
     render(<ProductList />)
@@ -161,7 +161,7 @@ describe('creating a product', () => {
   })
 
   it('keeps the form open and explains why when saving fails', async () => {
-    mockedList.mockResolvedValue([])
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
     const { AxiosError, AxiosHeaders } = await import('axios')
     const failure = new AxiosError('Request failed')
     failure.response = {
@@ -195,7 +195,7 @@ describe('editing a product', () => {
       category_id: 3,
       category: { id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' },
     })
-    mockedList.mockResolvedValue([existing])
+    mockedList.mockResolvedValue({ products: [existing], cachedAt: null })
     mockedReplace.mockResolvedValue(existing)
 
     render(<ProductList />)
@@ -219,7 +219,7 @@ describe('editing a product', () => {
 
 describe('deleting a product', () => {
   it('asks before deleting and does nothing on cancel', async () => {
-    mockedList.mockResolvedValue([product()])
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
 
     render(<ProductList />)
     fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Leche entera' }))
@@ -233,7 +233,7 @@ describe('deleting a product', () => {
   })
 
   it('deletes and reloads once confirmed', async () => {
-    mockedList.mockResolvedValue([product()])
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
     mockedDelete.mockResolvedValue(undefined)
 
     render(<ProductList />)
@@ -248,7 +248,7 @@ describe('deleting a product', () => {
 
 describe('the overlay', () => {
   it('closes on Escape', async () => {
-    mockedList.mockResolvedValue([])
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
 
     render(<ProductList />)
     fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
@@ -269,7 +269,7 @@ describe('filtering and sorting', () => {
   ]
 
   it('narrows the list by location', async () => {
-    mockedList.mockResolvedValue(pantry)
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
@@ -280,7 +280,7 @@ describe('filtering and sorting', () => {
   })
 
   it('narrows the list by status', async () => {
-    mockedList.mockResolvedValue(pantry)
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
@@ -291,7 +291,7 @@ describe('filtering and sorting', () => {
   })
 
   it('combines filters instead of replacing them', async () => {
-    mockedList.mockResolvedValue(pantry)
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
@@ -303,7 +303,7 @@ describe('filtering and sorting', () => {
   })
 
   it('reorders by name without refetching', async () => {
-    mockedList.mockResolvedValue(pantry)
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
@@ -320,7 +320,7 @@ describe('filtering and sorting', () => {
   })
 
   it('shows how many matched and restores everything on clear', async () => {
-    mockedList.mockResolvedValue(pantry)
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
@@ -336,7 +336,7 @@ describe('filtering and sorting', () => {
   })
 
   it('distinguishes "no matches" from an empty pantry', async () => {
-    mockedList.mockResolvedValue(pantry)
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
@@ -346,5 +346,27 @@ describe('filtering and sorting', () => {
     expect(screen.getByText('Ningún producto coincide con los filtros.')).toBeInTheDocument()
     // Telling someone with a full pantry to "add their first purchase" is wrong.
     expect(screen.queryByText('Todavía no hay nada registrado.')).not.toBeInTheDocument()
+  })
+})
+
+describe('offline data', () => {
+  it('says so when the list came from the cache', async () => {
+    mockedList.mockResolvedValue({
+      products: [product()],
+      cachedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    })
+
+    render(<ProductList />)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('mostrando datos guardados hace 2 horas')
+  })
+
+  it('says nothing when the list is current', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+
+    render(<ProductList />)
+
+    await screen.findByText('Leche entera')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

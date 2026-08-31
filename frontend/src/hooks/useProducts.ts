@@ -8,6 +8,8 @@ interface UseProductsResult {
   products: Product[]
   loading: boolean
   error: string | null
+  /** Set when the list came from the offline cache rather than the network. */
+  cachedAt: Date | null
   reload: () => void
 }
 
@@ -25,6 +27,7 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cachedAt, setCachedAt] = useState<Date | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
 
   // Depend on the serialized filters: a fresh object literal on every render
@@ -36,9 +39,10 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
 
     void (async () => {
       try {
-        const data = await listProducts(JSON.parse(filterKey) as ProductFilters)
+        const result = await listProducts(JSON.parse(filterKey) as ProductFilters)
         if (active) {
-          setProducts(data)
+          setProducts(result.products)
+          setCachedAt(result.cachedAt)
           setError(null)
         }
       } catch (caught) {
@@ -62,5 +66,14 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     setReloadNonce((nonce) => nonce + 1)
   }, [])
 
-  return { products, loading, error, reload }
+  // Coming back into signal should refresh on its own. Having to pull down or
+  // reload to escape a stale list is the sort of thing that makes an offline
+  // cache feel broken rather than helpful.
+  useEffect(() => {
+    const onOnline = () => setReloadNonce((nonce) => nonce + 1)
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [])
+
+  return { products, loading, error, cachedAt, reload }
 }

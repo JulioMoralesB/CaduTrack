@@ -332,3 +332,13 @@
   font-weight: 400;
   color: var(--text);
 }
+
+.stale-banner {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--status-expiring-soon);
+  border-radius: 0.5rem;
+  color: var(--status-expiring-soon);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
