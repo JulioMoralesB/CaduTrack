@@ -1,11 +1,11 @@
 """A local Ollama call for the icon-assignment fallback.
 
 Only reached after app.icons's table and app.icon_cache both miss. Never
-raises: an unconfigured URL, a refused connection, a timeout, an HTTP error,
-or a response that doesn't parse are all reported as None, and the caller
-falls back to the default icon. A missing icon is cosmetic; blocking product
-creation on a model that might be down, slow, or mid-restart is not an
-acceptable trade for avoiding it.
+raises: an unconfigured URL, a refused connection, a timeout, an HTTP error, a
+response that doesn't parse, or an answer that is not actually usable as one
+icon are all reported as None, and the caller falls back to the default icon.
+A missing icon is cosmetic; blocking product creation on a model that might be
+down, slow, or mid-restart is not an acceptable trade for avoiding it.
 
 "think": false is not optional — without it the answer lands in a separate
 reasoning field and `response` arrives empty, which has already cost two
@@ -47,6 +47,42 @@ _PROMPT_TEMPLATE = (
 # Straight and curly quote marks, colons and backticks — the characters
 # actually observed stuck to an otherwise-correct emoji in real responses.
 _STRAY_CHARS = "\"'‘’“”`:"
+
+# Codepoints that combine with a preceding pictograph rather than standing on
+# their own — stripped before counting "how many symbols is this", so a
+# legitimate "🌶️" (hot pepper + VS16) still counts as one.
+_COMBINING_MODIFIERS = frozenset(
+    [0x200D]  # ZERO WIDTH JOINER
+    + [0xFE0E, 0xFE0F]  # variation selectors (text vs. emoji presentation)
+    + list(range(0x1F3FB, 0x1F400))  # Fitzpatrick skin-tone modifiers
+)
+
+# Reserved by the Unicode standard for application-private glyphs — an icon
+# font's own mapping, never a real emoji. A model answering from this range
+# renders as a blank box in any normal font; observed directly, once, as the
+# entire response for "Aceitunas kalamata".
+_PRIVATE_USE_RANGES = ((0xE000, 0xF8FF), (0xF0000, 0xFFFFD), (0x100000, 0x10FFFD))
+
+
+def _in_private_use_area(icon: str) -> bool:
+    return any(low <= ord(ch) <= high for ch in icon for low, high in _PRIVATE_USE_RANGES)
+
+
+def _is_one_symbol(icon: str) -> bool:
+    """True when `icon` is a single pictograph, modifiers aside.
+
+    Not full emoji validation — that needs a Unicode emoji-data table this
+    project has deliberately chosen not to hand-maintain (see #90's PR
+    description). This is narrower and cheaper: reject only what is provably
+    *more than one thing* glued together, which is exactly the shape multiple
+    real responses have taken — e.g. "🥤⚡️✨" for "Kombucha de jengibre",
+    three symbols where the schema asked for one. Nothing in this project's
+    domain (food and household product icons) legitimately needs a multi-base
+    ZWJ sequence, so any base codepoint beyond the first is treated as
+    evidence of exactly that failure, not a creative compound emoji.
+    """
+    base_codepoints = [ord(ch) for ch in icon if ord(ch) not in _COMBINING_MODIFIERS]
+    return len(base_codepoints) == 1
 
 
 def resolve_icon_via_model(name: str) -> str | None:
@@ -97,6 +133,14 @@ def resolve_icon_via_model(name: str) -> str | None:
     # creative one, and must not reach the database as a truncated string.
     if not icon or len(icon) > 16:
         logger.warning("Ollama returned an unusable icon for %r: %r", name, icon)
+        return None
+
+    if _in_private_use_area(icon):
+        logger.warning("Ollama returned a private-use codepoint for %r: %r", name, icon)
+        return None
+
+    if not _is_one_symbol(icon):
+        logger.warning("Ollama returned more than one symbol for %r: %r", name, icon)
         return None
 
     return icon

@@ -406,3 +406,116 @@ def test_a_model_failure_falls_back_to_the_default_icon(api_client, mocker):
     body = response.json()
     assert body["icon"] == "\U0001F9FA"
     assert body["icon_source"] == "default"
+
+
+@pytest.mark.integration
+def test_reassign_updates_only_default_icon_products(api_client, mocker):
+    """A LOOKUP hit stays untouched, a DEFAULT one gets re-resolved."""
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+    lookup_hit = api_client.post("/products", json=_product(name="Plátano")).json()
+    assert lookup_hit["icon_source"] == "lookup"
+
+    # Simulate a pre-existing row: created before icons shipped, or during a
+    # table miss, so it is stuck at the fallback exactly like a real backfilled
+    # product would be.
+    stuck = api_client.post("/products", json=_product(name="Nopal limpio")).json()
+    assert stuck["icon_source"] == "lookup"  # sanity: this name does hit the table
+
+    response = api_client.post("/products/icons/reassign")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["considered"] == 0
+    assert body["updated"] == 0
+
+
+@pytest.mark.integration
+def test_reassign_resolves_products_stuck_at_the_default_icon(api_client, mocker):
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+    # Force this one to the fallback the way a genuine miss would: nothing in
+    # the table matches, and the model is mocked to also miss.
+    stuck = api_client.post("/products", json=_product(name="Zzyzx")).json()
+    assert stuck["icon_source"] == "default"
+
+    # The table would now resolve it correctly if re-run — simulate the table
+    # having "caught up", the same situation a name that used to miss and now
+    # doesn't (or AI turned on after the fact) would produce.
+    mocker.patch("app.routers.products.resolve_icon", return_value="\U0001F35E")
+
+    response = api_client.post("/products/icons/reassign")
+
+    body = response.json()
+    assert body["considered"] == 1
+    assert body["updated"] == 1
+    assert body["still_default"] == 0
+
+    refreshed = api_client.get(f"/products/{stuck['id']}").json()
+    assert refreshed["icon"] == "\U0001F35E"
+    assert refreshed["icon_source"] == "lookup"
+
+
+@pytest.mark.integration
+def test_reassign_leaves_a_manual_override_untouched(api_client, mocker):
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+    product_id = api_client.post("/products", json=_product(name="Zzyzx")).json()["id"]
+    api_client.patch(f"/products/{product_id}/icon", json={"icon": "\U0001F31F"})
+
+    response = api_client.post("/products/icons/reassign")
+
+    assert response.json()["considered"] == 0
+    refreshed = api_client.get(f"/products/{product_id}").json()
+    assert refreshed["icon"] == "\U0001F31F"
+    assert refreshed["icon_source"] == "manual"
+
+
+@pytest.mark.integration
+def test_reassign_counts_what_is_still_unresolved(api_client, mocker):
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+    api_client.post("/products", json=_product(name="Zzyzx"))
+    api_client.post("/products", json=_product(name="Qwxyzabc"))
+
+    response = api_client.post("/products/icons/reassign")
+
+    body = response.json()
+    assert body["considered"] == 2
+    assert body["updated"] == 0
+    assert body["still_default"] == 2
+
+
+@pytest.mark.integration
+def test_reassign_actually_commits_not_just_updates_the_in_session_objects(api_client, db_session, mocker):
+    """A missing commit here would still pass every assertion above: the
+    fixture's api_client and db_session share one SQLAlchemy session for the
+    whole test, so reading a mutated ORM object back never proves it reached
+    the database — only a fresh read after expiring the session's identity
+    map does."""
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+    product_id = api_client.post("/products", json=_product(name="Zzyzx")).json()["id"]
+    mocker.patch("app.routers.products.resolve_icon", return_value="\U0001F35E")
+
+    api_client.post("/products/icons/reassign")
+    db_session.expire_all()
+
+    assert api_client.get(f"/products/{product_id}").json()["icon"] == "\U0001F35E"
+
+
+@pytest.mark.integration
+def test_reassign_reuses_the_normal_resolution_order_including_the_cache(api_client, mocker):
+    """The batch endpoint calls the same _resolve_icon as creation — this
+    proves it, rather than assuming two call sites stay in sync forever."""
+    mocker.patch("app.routers.products.resolve_icon_via_model", return_value=None)
+    first = api_client.post("/products", json=_product(name="Zzyzx one")).json()
+    second = api_client.post("/products", json=_product(name="ZZYZX ONE")).json()  # same normalized name
+    assert first["icon_source"] == second["icon_source"] == "default"
+
+    mocked = mocker.patch("app.routers.products.resolve_icon_via_model", return_value="\U0001F31F")
+
+    api_client.post("/products/icons/reassign")
+
+    # One model call resolves the first row; the cache must serve the second
+    # from the same batch, not trigger a second call.
+    assert mocked.call_count == 1
+    for original in (first, second):
+        refreshed = api_client.get(f"/products/{original['id']}").json()
+        assert refreshed["icon"] == "\U0001F31F"
+        assert refreshed["icon_source"] == "ai"

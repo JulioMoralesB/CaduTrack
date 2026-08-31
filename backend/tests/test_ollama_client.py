@@ -141,3 +141,47 @@ def test_returns_none_for_an_icon_too_long_to_store(mocker):
     mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response("a" * 20))
 
     assert resolve_icon_via_model("Kombucha") is None
+
+
+def test_returns_none_for_a_private_use_area_codepoint(mocker):
+    """Reproduced directly against the real server: the entire answer for
+    "Aceitunas kalamata" was U+F774, a Private Use Area codepoint. It passes
+    every prior check — non-empty, one character, well under the length
+    ceiling — and renders as a blank box in any normal font, which is worse
+    than the default icon: a visible gap looks like the app is broken, not
+    like a product with no icon."""
+    mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response(""))
+
+    assert resolve_icon_via_model("Aceitunas kalamata") is None
+
+
+def test_returns_none_for_multiple_symbols_glued_together(mocker):
+    """Reproduced directly: "🥤⚡️✨" for "Kombucha de jengibre" — three
+    symbols, not one, despite the schema asking for a single emoji."""
+    mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response("\U0001F964⚡️✨"))
+
+    assert resolve_icon_via_model("Kombucha de jengibre") is None
+
+
+def test_accepts_a_single_emoji_with_a_variation_selector(mocker):
+    """The guard above must not overreach: "🌶️" is hot pepper + VS16, two
+    codepoints and one symbol — already a real entry in app/icons.py's own
+    table, so rejecting it would break a legitimate case to catch a bad one."""
+    mocker.patch("app.ollama_client.httpx.post", return_value=_ok_response("\U0001F336\uFE0F"))
+
+    assert resolve_icon_via_model("Chile") == "\U0001F336\uFE0F"
+
+
+def test_returns_none_for_unrelated_symbols_from_an_earlier_real_case(mocker):
+    """The astrological/geometric garbage from #90's PR description
+    ("☍️△" for "Mermelada de higo") — documented there as an accepted,
+    unchased residual. This guard turns out to catch it anyway: two base
+    symbols survive stripping the variation selector, which is exactly what
+    _is_one_symbol is for. A pleasant side effect, not the reason it exists —
+    the multi-symbol and private-use cases above are."""
+    mocker.patch(
+        "app.ollama_client.httpx.post",
+        return_value=_ok_response("\u260D\uFE0F\u25B3"),
+    )
+
+    assert resolve_icon_via_model("Mermelada de higo") is None

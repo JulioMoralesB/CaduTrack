@@ -47,6 +47,19 @@ class ProductIconUpdate(BaseModel):
     icon: str = Field(min_length=1, max_length=16)
 
 
+class IconReassignmentResult(BaseModel):
+    """Summary of a batch icon reassignment.
+
+    Deliberately just counts, not the list of affected products: the client
+    already has the product list and reloads it after this call, so echoing
+    every row back here would be a second, redundant source of the same data.
+    """
+
+    considered: int
+    updated: int
+    still_default: int
+
+
 class ProductQuantityDelta(BaseModel):
     """A relative change to a product's quantity.
 
