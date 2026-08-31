@@ -66,13 +66,25 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     setReloadNonce((nonce) => nonce + 1)
   }, [])
 
-  // Coming back into signal should refresh on its own. Having to pull down or
-  // reload to escape a stale list is the sort of thing that makes an offline
-  // cache feel broken rather than helpful.
+  // Escaping a stale list should not need a manual reload.
+  //
+  // Two triggers, because neither is sufficient. The `online` event misses the
+  // common cases: a device that believes it is connected behind a broken
+  // network, and DevTools' offline simulation, which does not dispatch it at
+  // all. Returning to the tab is the trigger that actually fires in the real
+  // path — phone into pocket, phone out of pocket, in front of the fridge.
   useEffect(() => {
-    const onOnline = () => setReloadNonce((nonce) => nonce + 1)
-    window.addEventListener('online', onOnline)
-    return () => window.removeEventListener('online', onOnline)
+    const refresh = () => setReloadNonce((nonce) => nonce + 1)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+
+    window.addEventListener('online', refresh)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('online', refresh)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   return { products, loading, error, cachedAt, reload }

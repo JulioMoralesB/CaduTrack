@@ -370,3 +370,46 @@ describe('offline data', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
+
+describe('recovering from a stale list', () => {
+  it('refetches when the browser reports it is back online', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: new Date() })
+
+    render(<ProductList />)
+    await screen.findByText('Leche entera')
+    expect(mockedList).toHaveBeenCalledTimes(1)
+
+    fireEvent(window, new Event('online'))
+
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+  })
+
+  it('refetches when the tab becomes visible again', async () => {
+    // The trigger that actually fires in the real path: the `online` event
+    // misses a device that believes it is connected behind a broken network.
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: new Date() })
+
+    render(<ProductList />)
+    await screen.findByText('Leche entera')
+    expect(mockedList).toHaveBeenCalledTimes(1)
+
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    fireEvent(document, new Event('visibilitychange'))
+
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+  })
+
+  it('does not refetch when the tab is being hidden', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+
+    render(<ProductList />)
+    await screen.findByText('Leche entera')
+
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    fireEvent(document, new Event('visibilitychange'))
+
+    // Refetching on the way out wastes a request nobody is waiting for.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(mockedList).toHaveBeenCalledTimes(1)
+  })
+})
