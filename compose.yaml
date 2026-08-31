@@ -12,6 +12,11 @@ services:
     container_name: cadutrack
     ports:
       - "${FRONTEND_PORT:-9903}:80"
+    environment:
+      # nginx stamps its JSON log lines with the container's local time. Same
+      # value the API uses, so the two halves of one request do not appear
+      # hours apart when the streams are read together.
+      TZ: ${TIMEZONE:-UTC}
     restart: unless-stopped
     depends_on:
       - cadutrack-api
