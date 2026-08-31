@@ -7,7 +7,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 from app.config import settings
-from app.db.bootstrap import DatabaseUnreachableError, _maintenance_url, ensure_database_exists
+from app.db.bootstrap import (
+    DatabaseAuthenticationError,
+    DatabaseUnreachableError,
+    _maintenance_url,
+    ensure_database_exists,
+)
 
 THROWAWAY = "cadutrack_bootstrap_pytest"
 
@@ -34,6 +39,62 @@ class FakeClock:
 
 def _down() -> bool:
     raise OperationalError("connection failed", None, Exception())
+
+
+def _operational_error(message: str) -> OperationalError:
+    """Build an OperationalError carrying the given server-reported message.
+
+    Message text is the only signal available to classify these: psycopg
+    does not attach a SQLSTATE to failures raised during connection setup,
+    where auth happens before the wire protocol can hand back a typed
+    exception. These strings were captured against a live Postgres 16.
+    """
+    return OperationalError("connection failed", None, Exception(message))
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        'FATAL:  database "cadutrack" does not exist',
+        'FATAL:  database "cadutrack_bootstrap_pytest" does not exist',
+    ],
+)
+def test_a_missing_database_is_classified_as_missing_not_an_auth_failure(message):
+    import app.db.bootstrap as bootstrap
+
+    exc = _operational_error(message)
+    assert bootstrap._is_missing_database(exc) is True
+    assert bootstrap._is_authentication_failure(exc) is False
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # The default scram/md5 auth path: Postgres deliberately gives this
+        # same message for a wrong password and for a role that doesn't
+        # exist, to avoid revealing which one it was.
+        'FATAL:  password authentication failed for user "cadutrack"',
+        # The trust/peer auth path: a role check happens up front, so the
+        # message names the role directly — and it contains "does not
+        # exist", which is exactly what the old substring check confused
+        # with a missing database.
+        'FATAL:  role "cadutrack" does not exist',
+    ],
+)
+def test_a_credentials_failure_is_classified_as_auth_not_a_missing_database(message):
+    import app.db.bootstrap as bootstrap
+
+    exc = _operational_error(message)
+    assert bootstrap._is_authentication_failure(exc) is True
+    assert bootstrap._is_missing_database(exc) is False
+
+
+def test_a_generic_connection_failure_is_classified_as_neither(monkeypatch):
+    import app.db.bootstrap as bootstrap
+
+    exc = _operational_error("connection refused")
+    assert bootstrap._is_missing_database(exc) is False
+    assert bootstrap._is_authentication_failure(exc) is False
 
 
 def test_maintenance_url_keeps_the_credentials_and_swaps_the_database():
@@ -114,6 +175,28 @@ def test_a_transient_outage_produces_warnings_and_no_error(monkeypatch, caplog):
     assert levels == ["WARNING", "WARNING"]
     assert "attempt 1" in caplog.records[0].getMessage()
     assert "retrying in 1s" in caplog.records[0].getMessage()
+
+
+def test_an_authentication_failure_is_not_retried(monkeypatch):
+    """Bad credentials will never fix themselves, so don't spend the budget.
+
+    Mirrors test_the_budget_is_spent_in_full_and_never_overrun, which proves a
+    transient failure DOES retry for the full 300s — this proves a credentials
+    failure does NOT: it must fail on the very first attempt, with no sleep.
+    """
+    import app.db.bootstrap as bootstrap
+
+    def bad_credentials() -> bool:
+        raise bootstrap.DatabaseAuthenticationError(_operational_error("irrelevant"))
+
+    clock = FakeClock()
+    monkeypatch.setattr(bootstrap, "_database_exists", bad_credentials)
+    monkeypatch.setattr(bootstrap, "time", clock)
+
+    with pytest.raises(DatabaseAuthenticationError):
+        bootstrap._database_exists_once_reachable()
+
+    assert clock.slept == []
 
 
 def test_the_delays_grow_and_then_hold_at_the_cap(monkeypatch):
@@ -213,3 +296,31 @@ def test_main_exits_non_zero_when_the_budget_is_exhausted(monkeypatch):
         bootstrap.main()
 
     assert excinfo.value.code == 1
+
+
+def test_main_reports_bad_credentials_instead_of_a_server_that_never_came_up(monkeypatch, caplog):
+    """The wrong error message here sends troubleshooting at the wrong system.
+
+    A misclassified auth failure used to burn the full 300s and then log
+    "server unreachable" — pointing at Postgres/network when the fix was
+    always in the .env. This must fail on the first attempt, with no WARNING
+    retries, and say to check the credentials.
+    """
+    import app.db.bootstrap as bootstrap
+
+    def bad_credentials() -> bool:
+        raise bootstrap.DatabaseAuthenticationError(
+            _operational_error('FATAL:  password authentication failed for user "cadutrack"')
+        )
+
+    monkeypatch.setattr(bootstrap, "_database_exists", bad_credentials)
+    monkeypatch.setattr(bootstrap, "time", FakeClock())
+    monkeypatch.setattr(bootstrap, "setup_logging", lambda **kwargs: None)
+
+    with caplog.at_level(logging.DEBUG, logger="app.db.bootstrap"):
+        with pytest.raises(SystemExit) as excinfo:
+            bootstrap.main()
+
+    assert excinfo.value.code == 1
+    assert [record.levelname for record in caplog.records] == ["ERROR"]
+    assert "DB_USER/DB_PASSWORD" in caplog.records[0].getMessage()

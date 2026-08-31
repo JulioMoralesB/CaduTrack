@@ -11,6 +11,7 @@ role viable, since the common path needs no rights beyond the app's own.
 """
 
 import logging
+import re
 import sys
 import time
 from collections.abc import Iterator
@@ -65,6 +66,41 @@ class DatabaseUnreachableError(RuntimeError):
         self.last_error = last_error
 
 
+class DatabaseAuthenticationError(RuntimeError):
+    """The server answered but rejected our credentials.
+
+    Raised immediately instead of joining the retry loop: waiting cannot turn a
+    wrong DB_USER or DB_PASSWORD into a right one, and retrying it for the full
+    connect budget would misreport a credentials problem as the server being
+    down.
+    """
+
+    def __init__(self, cause: OperationalError) -> None:
+        super().__init__(f"Database rejected our credentials, check DB_USER/DB_PASSWORD: {cause}")
+
+
+# psycopg does not attach a SQLSTATE to failures raised during connection setup
+# (auth happens before the wire protocol can hand back a typed exception) — the
+# server's message text is the only signal available. Verified against a live
+# Postgres 16: an unknown role or wrong password produces "password
+# authentication failed for user ..." under the default scram/md5 auth, or
+# "role ... does not exist" under trust/peer auth; a missing database produces
+# "database ... does not exist". The two must not be confused: the first is
+# never worth retrying, the second always is.
+_DATABASE_MISSING_RE = re.compile(r'database "[^"]*" does not exist')
+_AUTH_FAILURE_RE = re.compile(r'password authentication failed|role "[^"]*" does not exist')
+
+
+def _is_missing_database(exc: OperationalError) -> bool:
+    """True when the server answered but the configured database isn't there."""
+    return bool(_DATABASE_MISSING_RE.search(str(exc)))
+
+
+def _is_authentication_failure(exc: OperationalError) -> bool:
+    """True when the server rejected our credentials rather than being down."""
+    return bool(_AUTH_FAILURE_RE.search(str(exc)))
+
+
 def _database_exists() -> bool:
     """True when the configured database can be connected to."""
     engine = create_engine(
@@ -76,10 +112,10 @@ def _database_exists() -> bool:
             connection.execute(text("SELECT 1"))
         return True
     except OperationalError as exc:
-        # psycopg maps SQLSTATE 3D000 (invalid_catalog_name) to this; anything
-        # else is a genuine connection problem the caller should see.
-        if "3D000" in str(exc) or "does not exist" in str(exc):
+        if _is_missing_database(exc):
             return False
+        if _is_authentication_failure(exc):
+            raise DatabaseAuthenticationError(exc) from exc
         raise
     finally:
         engine.dispose()
@@ -186,6 +222,11 @@ def main() -> None:
             exc.elapsed,
             exc.last_error.__class__.__name__,
         )
+        sys.exit(1)
+    except DatabaseAuthenticationError as exc:
+        # Fails on the first attempt, not after the budget: the server was
+        # reachable the whole time, so this must not be read as it being down.
+        logger.error("%s", exc)
         sys.exit(1)
     except OperationalError as exc:
         # Only reachable from the CREATE DATABASE path, which runs after the
