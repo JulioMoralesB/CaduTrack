@@ -96,30 +96,86 @@
 }
 
 [data-theme="ciruela"][data-mode="light"] {
-  --bg: #f7f5f8;
+  --bg: #f7f6f8;
   --surface: #ffffff;
-  --text: #241f28;
-  --text-muted: #6b6273;
-  --border: #e5e0e9;
-  --accent: #6d5580;
-  --danger: #a8455e;
+  --text: #262229;
+  --text-muted: #6e6873;
+  --border: #e6e2e9;
+  --accent: #6b5f75;
+  --danger: #a8506a;
   --on-fill: #ffffff;
   --status-fresh: #2f7d32;
   --status-expiring-soon: #9a6206;
-  --status-expired: #a8455e;
+  --status-expired: #a8506a;
 }
 
 [data-theme="ciruela"][data-mode="dark"] {
-  --bg: #16131a;
-  --surface: #201c26;
-  --text: #eee9f0;
-  --text-muted: #a79fae;
-  --border: #332c3c;
-  --accent: #b09ac0;
-  --danger: #d98da0;
-  --on-fill: #16131a;
+  --bg: #171519;
+  --surface: #211e24;
+  --text: #ede9ef;
+  --text-muted: #a6a0ab;
+  --border: #322d37;
+  --accent: #a99cb2;
+  --danger: #d194a4;
+  --on-fill: #171519;
   --status-fresh: #7fbf7a;
   --status-expiring-soon: #e0a33a;
-  --status-expired: #d98da0;
+  --status-expired: #d194a4;
 }
 
+
+[data-theme="salvia"][data-mode="light"] {
+  --bg: #f4f7f5;
+  --surface: #ffffff;
+  --text: #1f2622;
+  --text-muted: #5c6b62;
+  --border: #dde5e0;
+  --accent: #3d7a70;
+  --danger: #b03434;
+  --on-fill: #ffffff;
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03434;
+}
+
+[data-theme="salvia"][data-mode="dark"] {
+  --bg: #121815;
+  --surface: #1b221e;
+  --text: #e8efea;
+  --text-muted: #98a89f;
+  --border: #2b352f;
+  --accent: #7cbcae;
+  --danger: #e08585;
+  --on-fill: #121815;
+  --status-fresh: #7fbf7a;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e08585;
+}
+
+[data-theme="indigo"][data-mode="light"] {
+  --bg: #f4f5fa;
+  --surface: #ffffff;
+  --text: #1e2130;
+  --text-muted: #5c6280;
+  --border: #dfe1ee;
+  --accent: #4a5490;
+  --danger: #b03452;
+  --on-fill: #ffffff;
+  --status-fresh: #2f7d32;
+  --status-expiring-soon: #9a6206;
+  --status-expired: #b03452;
+}
+
+[data-theme="indigo"][data-mode="dark"] {
+  --bg: #101322;
+  --surface: #191d2e;
+  --text: #e7e9f5;
+  --text-muted: #9aa0bd;
+  --border: #282d42;
+  --accent: #929ce0;
+  --danger: #e08fa0;
+  --on-fill: #101322;
+  --status-fresh: #7fbf7a;
+  --status-expiring-soon: #e0a33a;
+  --status-expired: #e08fa0;
+}

@@ -20,7 +20,9 @@ export const THEMES: Theme[] = [
   { id: 'bosque', name: 'Bosque', preview: ['#f6f7f5', '#ffffff', '#3f7d3a'] },
   { id: 'pizarra', name: 'Pizarra', preview: ['#f4f5f7', '#ffffff', '#4a5568'] },
   { id: 'oceano', name: 'Océano', preview: ['#f2f6fa', '#ffffff', '#2b6cb0'] },
-  { id: 'ciruela', name: 'Ciruela', preview: ['#f7f5f8', '#ffffff', '#6d5580'] },
+  { id: 'ciruela', name: 'Ciruela', preview: ['#f7f6f8', '#ffffff', '#6b5f75'] },
+  { id: 'salvia', name: 'Salvia', preview: ['#f4f7f5', '#ffffff', '#3d7a70'] },
+  { id: 'indigo', name: 'Índigo', preview: ['#f4f5fa', '#ffffff', '#4a5490'] },
 ]
 
 export const MODES: { id: Mode; name: string }[] = [
