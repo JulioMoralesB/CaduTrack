@@ -86,3 +86,10 @@ export interface AlertTriggerResult {
   products: number
   detail: string
 }
+
+/** Summary of a batch icon reassignment — see POST /products/icons/reassign. */
+export interface IconReassignmentResult {
+  considered: number
+  updated: number
+  still_default: number
+}

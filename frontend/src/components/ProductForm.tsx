@@ -158,15 +158,18 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
           <div className="form__field">
             <label htmlFor="product-quantity">Cantidad</label>
             <span className="quantity-stepper">
-              <button
-                type="button"
-                className="quantity-stepper__button"
-                onClick={() => update('quantity', stepQuantity(form.quantity, -1))}
-                disabled={!canStepDown(form.quantity)}
-                aria-label="Reducir cantidad"
-              >
-                −
-              </button>
+              {/* Hidden rather than disabled at 1, matching the card's
+                  stepper — see ProductCard.tsx for why. */}
+              {canStepDown(form.quantity) && (
+                <button
+                  type="button"
+                  className="quantity-stepper__button"
+                  onClick={() => update('quantity', stepQuantity(form.quantity, -1))}
+                  aria-label="Reducir cantidad"
+                >
+                  −
+                </button>
+              )}
               <input
                 id="product-quantity"
                 type="number"

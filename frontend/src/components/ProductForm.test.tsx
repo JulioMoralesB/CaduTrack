@@ -65,3 +65,45 @@ describe('ProductForm while saving', () => {
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled()
   })
 })
+
+describe('ProductForm quantity stepper', () => {
+  it('hides "−" at the default quantity of 1', () => {
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(screen.queryByRole('button', { name: 'Reducir cantidad' })).not.toBeInTheDocument()
+  })
+
+  it('shows "−" again once "+" has been pressed, and hides it once stepped back to 1', () => {
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Aumentar cantidad' }))
+    expect(screen.getByRole('button', { name: 'Reducir cantidad' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reducir cantidad' }))
+    expect(screen.queryByRole('button', { name: 'Reducir cantidad' })).not.toBeInTheDocument()
+  })
+
+  it('shows "−" when editing a product whose quantity is already above 1', () => {
+    const product: Product = {
+      id: 1,
+      name: 'Huevos',
+      category_id: null,
+      quantity: '6.00',
+      unit: 'piezas',
+      expires_at: '2026-09-10',
+      location: 'fridge',
+      notes: null,
+      category: null,
+      icon: '\u{1F95A}',
+      icon_source: 'lookup',
+      created_at: '2026-08-29T00:00:00Z',
+      updated_at: '2026-08-29T00:00:00Z',
+      days_until_expiry: 5,
+      status: 'expiring_soon',
+    }
+
+    render(<ProductForm product={product} categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: 'Reducir cantidad' })).toBeInTheDocument()
+  })
+})

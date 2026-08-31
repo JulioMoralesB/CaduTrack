@@ -13,6 +13,7 @@ from app.icons import DEFAULT_ICON, normalize, resolve_icon
 from app.models import Category, IconSource, Location, Product
 from app.ollama_client import resolve_icon_via_model
 from app.schemas.product import (
+    IconReassignmentResult,
     ProductCreate,
     ProductIconUpdate,
     ProductQuantityDelta,
@@ -205,6 +206,41 @@ def override_icon(product_id: int, payload: ProductIconUpdate, db: Session = Dep
     db.refresh(product)
     logger.info("Set product %s (%s) icon to %r manually", product.id, product.name, payload.icon)
     return product
+
+
+@router.post("/icons/reassign", response_model=IconReassignmentResult)
+def reassign_default_icons(db: Session = Depends(get_db)) -> IconReassignmentResult:
+    """Re-run icon resolution for every product still at the fallback.
+
+    For deployments where products already existed before icons shipped, or
+    where AI was off and has since been turned on: those rows sit at
+    icon_source DEFAULT forever unless something re-evaluates them, since
+    nothing does that automatically (see override_icon's docstring — no
+    automatic path may touch a product's icon after creation either way).
+    This is that something, run on request rather than silently.
+
+    Scoped to DEFAULT only. A LOOKUP or AI row already reflects a real
+    resolution — re-running the table lookup would repeat the same answer,
+    and MANUAL must never be touched by anything automatic, which this query
+    cannot do since it never selects MANUAL rows in the first place.
+    """
+    candidates = list(
+        db.execute(select(Product).where(Product.icon_source == IconSource.DEFAULT.value)).scalars()
+    )
+
+    updated = 0
+    for product in candidates:
+        icon, icon_source = _resolve_icon(db, product.name)
+        if icon_source != IconSource.DEFAULT:
+            product.icon = icon
+            product.icon_source = icon_source
+            updated += 1
+
+    db.commit()
+    logger.info("Reassigned icons for %d/%d default-icon products", updated, len(candidates))
+    return IconReassignmentResult(
+        considered=len(candidates), updated=updated, still_default=len(candidates) - updated
+    )
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

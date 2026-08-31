@@ -1,6 +1,6 @@
 import { api } from '@/services/api'
 import { withRetry } from '@/services/retry'
-import type { Product, ProductFilters, ProductPayload } from '@/services/types'
+import type { IconReassignmentResult, Product, ProductFilters, ProductPayload } from '@/services/types'
 
 export interface ProductListResult {
   products: Product[]
@@ -79,5 +79,17 @@ export async function adjustProductQuantity(id: number, delta: number): Promise<
  */
 export async function setProductIcon(id: number, icon: string): Promise<Product> {
   const { data } = await withRetry(() => api.patch<Product>(`/products/${id}/icon`, { icon }))
+  return data
+}
+
+/**
+ * Re-run icon resolution for every product still at the fallback — the ones
+ * that existed before icons shipped, or that missed while AI was off. Never
+ * touches a product with a real answer already (lookup, ai) or a manual
+ * override; see the backend endpoint's own docstring for why that is safe by
+ * construction rather than by convention.
+ */
+export async function reassignIcons(): Promise<IconReassignmentResult> {
+  const { data } = await withRetry(() => api.post<IconReassignmentResult>('/products/icons/reassign'))
   return data
 }
