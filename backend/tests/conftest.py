@@ -50,7 +50,7 @@ def db_session():
     session.execute(
         text(
             "TRUNCATE products, categories, alert_settings, icon_settings, icon_name_cache, "
-            "shopping_trips, shopping_trip_items "
+            "shopping_trips, shopping_trip_items, barcode_lookups "
             "RESTART IDENTITY CASCADE"
         )
     )

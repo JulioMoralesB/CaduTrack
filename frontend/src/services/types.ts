@@ -137,6 +137,29 @@ export interface ShoppingTripItem {
   product_id: number | null
 }
 
+/**
+ * What a scanned barcode resolved to — see #30 and POST /barcodes/lookup.
+ * Never carries an expiry date: a barcode does not encode one, so the form
+ * this prefills always leaves "Caduca el" for the user to fill in by hand.
+ */
+export interface BarcodeLookupResult {
+  /** The GTIN read from a GS1-128 label, or the raw code as scanned for a
+   *  plain EAN/UPC — what remember() and a repeat scan are both keyed on. */
+  item_code: string
+  /** From a previous remember() call if this code has been scanned before,
+   *  otherwise from Open Food Facts, otherwise null (also always null for a
+   *  restricted-circulation code — see is_restricted_circulation). */
+  name: string | null
+  /** Only ever set by a previous remember() call; OFF has no icon of its
+   *  own to offer. */
+  icon: string | null
+  /** Read straight off a GS1-128 label's own (310n) weight field — never
+   *  from a remembered value, since the same product can weigh differently
+   *  on a later purchase. Null for a plain EAN/UPC, which carries no weight. */
+  quantity: string | null
+  unit: string | null
+}
+
 /** A shopping trip's checklist — see #84. Persists across reloads: the
  *  photo is analyzed once, then the trip stays visible until every item is
  *  either added as a product or dropped. */

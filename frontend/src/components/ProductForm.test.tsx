@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductForm } from '@/components/ProductForm'
-import type { LabelExtraction, Product } from '@/services/types'
+import type { BarcodeLookupResult, LabelExtraction, Product } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
   createProduct: vi.fn(),
@@ -13,13 +13,41 @@ vi.mock('@/services/visionService', () => ({
   extractLabel: vi.fn(),
 }))
 
+vi.mock('@/services/barcodesService', () => ({
+  lookupBarcode: vi.fn(),
+  rememberBarcode: vi.fn(),
+}))
+
+// Camera access and BarcodeDetector/zxing have their own coverage in
+// BarcodeScanner.test.tsx — here only the detected value matters, so the
+// component is replaced with two buttons standing in for what it reports.
+vi.mock('@/components/BarcodeScanner', () => ({
+  BarcodeScanner: ({ onDetected, onCancel }: { onDetected: (raw: string) => void; onCancel: () => void }) => (
+    <div>
+      <button type="button" onClick={() => onDetected('5449000000996')}>
+        fake-detect
+      </button>
+      <button type="button" onClick={onCancel}>
+        fake-cancel-scan
+      </button>
+    </div>
+  ),
+}))
+
 const products = await import('@/services/productsService')
 const vision = await import('@/services/visionService')
+const barcodes = await import('@/services/barcodesService')
 const mockedCreate = vi.mocked(products.createProduct)
 const mockedExtract = vi.mocked(vision.extractLabel)
+const mockedLookupBarcode = vi.mocked(barcodes.lookupBarcode)
+const mockedRememberBarcode = vi.mocked(barcodes.rememberBarcode)
 
 function labelExtraction(overrides: Partial<LabelExtraction> = {}): LabelExtraction {
   return { name: null, expires_at: null, quantity: null, unit: null, ...overrides }
+}
+
+function barcodeLookupResult(overrides: Partial<BarcodeLookupResult> = {}): BarcodeLookupResult {
+  return { item_code: '5449000000996', name: null, icon: null, quantity: null, unit: null, ...overrides }
 }
 
 function selectPhoto() {
@@ -28,6 +56,34 @@ function selectPhoto() {
     target: { files: [file] },
   })
 }
+
+function scanBarcode() {
+  fireEvent.click(screen.getByRole('button', { name: 'Escanear código de barras' }))
+  fireEvent.click(screen.getByRole('button', { name: 'fake-detect' }))
+}
+
+function fakeProduct(overrides: Partial<Product> = {}): Product {
+  return {
+    id: 1,
+    name: 'Nopal limpio',
+    category_id: null,
+    quantity: '1.00',
+    unit: null,
+    expires_at: '2026-09-10',
+    location: 'fridge',
+    notes: null,
+    category: null,
+    icon: '\u{1F955}',
+    icon_source: 'default',
+    created_at: '2026-08-29T00:00:00Z',
+    updated_at: '2026-08-29T00:00:00Z',
+    consumed_at: null,
+    days_until_expiry: 10,
+    status: 'fresh',
+    ...overrides,
+  }
+}
+
 
 /**
  * Fill only what the form requires, then submit.
@@ -220,5 +276,134 @@ describe('ProductForm label scan', () => {
     expect(screen.getByLabelText('Foto de la etiqueta (opcional)')).toBeDisabled()
     resolveRequest(labelExtraction())
     await waitFor(() => expect(screen.getByLabelText('Foto de la etiqueta (opcional)')).not.toBeDisabled())
+  })
+})
+
+describe('ProductForm barcode scan', () => {
+  // Several of these tests assert call counts on lookupBarcode/rememberBarcode,
+  // which nothing else in this file resets between tests.
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // A bare vi.fn() with no return value resolves to undefined rather than
+    // a Promise, and ProductForm always chains .catch() onto this call — a
+    // test that never overrides it would otherwise crash on a mock, not on
+    // anything the component itself does wrong.
+    mockedRememberBarcode.mockResolvedValue(undefined)
+  })
+
+  it('offers the scan button when creating, not when editing', () => {
+    const { unmount } = render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Escanear código de barras' })).toBeInTheDocument()
+    unmount()
+
+    render(<ProductForm product={fakeProduct()} categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Escanear código de barras' })).not.toBeInTheDocument()
+  })
+
+  it('pre-fills what the lookup returned, and never touches the expiry date', async () => {
+    mockedLookupBarcode.mockResolvedValue(
+      barcodeLookupResult({ name: 'Nopal limpio', quantity: '0.59', unit: 'kg' }),
+    )
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    scanBarcode()
+
+    await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
+    expect(screen.getByLabelText('Cantidad')).toHaveValue(0.59)
+    expect(screen.getByLabelText('Unidad')).toHaveValue('kg')
+    // A barcode never carries an expiry date — see #30 — so this is left
+    // exactly as it started, for the user to fill in by hand.
+    expect(screen.getByLabelText('Caduca el')).toHaveValue('')
+    expect(screen.getByText('Código escaneado. Revisa los datos antes de guardar.')).toBeInTheDocument()
+  })
+
+  it('leaves a field the lookup could not resolve untouched', async () => {
+    mockedLookupBarcode.mockResolvedValue(barcodeLookupResult({ name: 'Nopal limpio' }))
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Unidad'), { target: { value: 'piezas' } })
+
+    scanBarcode()
+
+    await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
+    expect(screen.getByLabelText('Unidad')).toHaveValue('piezas')
+  })
+
+  it('says so when a restricted-circulation code carries no known name', async () => {
+    mockedLookupBarcode.mockResolvedValue(barcodeLookupResult())
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    scanBarcode()
+
+    expect(
+      await screen.findByText('Código leído, pero sin información conocida. Completa los campos manualmente.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the failure inline and leaves the rest of the form usable', async () => {
+    mockedLookupBarcode.mockRejectedValue(new Error('nope'))
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    scanBarcode()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Huevos')
+  })
+
+  it('closes on cancel without touching the form', () => {
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escanear código de barras' }))
+    fireEvent.click(screen.getByRole('button', { name: 'fake-cancel-scan' }))
+
+    expect(screen.queryByRole('button', { name: 'fake-cancel-scan' })).not.toBeInTheDocument()
+    expect(mockedLookupBarcode).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Nombre')).toHaveValue('')
+  })
+
+  it('remembers the scanned code once the product it fed is actually saved', async () => {
+    mockedLookupBarcode.mockResolvedValue(barcodeLookupResult({ name: 'Nopal limpio', quantity: '0.59', unit: 'kg' }))
+    const saved = fakeProduct({ name: 'Nopal limpio (confirmado)', icon: '\u{1F955}' })
+    mockedCreate.mockResolvedValue(saved)
+    const onSaved = vi.fn()
+    render(<ProductForm categories={[]} onSaved={onSaved} onCancel={vi.fn()} />)
+
+    scanBarcode()
+    await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    // The name below is what the user actually confirmed in the form —
+    // remember() must reflect that, not the raw lookup result, since the
+    // two can differ once the user edits before saving.
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nopal limpio (confirmado)' } })
+    fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
+    expect(mockedRememberBarcode).toHaveBeenCalledWith('5449000000996', 'Nopal limpio (confirmado)', '\u{1F955}')
+  })
+
+  it('does not remember anything when no barcode was ever scanned', async () => {
+    mockedCreate.mockResolvedValue(fakeProduct())
+    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fillAndSubmit()
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce())
+    expect(mockedRememberBarcode).not.toHaveBeenCalled()
+  })
+
+  it('does not let a failed remember block the save from completing', async () => {
+    mockedLookupBarcode.mockResolvedValue(barcodeLookupResult({ name: 'Nopal limpio' }))
+    mockedRememberBarcode.mockRejectedValue(new Error('boom'))
+    const saved = fakeProduct()
+    mockedCreate.mockResolvedValue(saved)
+    const onSaved = vi.fn()
+    render(<ProductForm categories={[]} onSaved={onSaved} onCancel={vi.fn()} />)
+
+    scanBarcode()
+    await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
   })
 })

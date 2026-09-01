@@ -418,8 +418,25 @@
 }
 
 .form__scan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
   padding-bottom: 0.875rem;
   border-bottom: 1px solid var(--border);
+}
+
+.barcode-scanner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.barcode-scanner__video {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  background: #000;
 }
 
 /* Filters */

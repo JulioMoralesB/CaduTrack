@@ -1,10 +1,12 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 
+import { BarcodeScanner } from '@/components/BarcodeScanner'
 import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
 import { LOCATION_LABELS } from '@/labels'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
+import { lookupBarcode, rememberBarcode } from '@/services/barcodesService'
 import { createProduct, replaceProduct } from '@/services/productsService'
 import type { Category, Location, Product, ProductPayload } from '@/services/types'
 import { extractLabel } from '@/services/visionService'
@@ -66,6 +68,16 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
   const [scanError, setScanError] = useState<string | null>(null)
   const [scanHint, setScanHint] = useState<string | null>(null)
 
+  const [barcodeScanning, setBarcodeScanning] = useState(false)
+  const [barcodeLookupPending, setBarcodeLookupPending] = useState(false)
+  const [barcodeError, setBarcodeError] = useState<string | null>(null)
+  const [barcodeHint, setBarcodeHint] = useState<string | null>(null)
+  // What to remember() once the save this scan feeds into actually
+  // succeeds — see #30. A scan the user abandons or types straight over
+  // must not remember anything, so this only ever gets read from
+  // handleSubmit, never used on its own.
+  const [pendingBarcode, setPendingBarcode] = useState<{ itemCode: string; icon: string | null } | null>(null)
+
   const isEdit = product !== undefined
 
   // Categories arrive asynchronously. Until they do, a select whose value has
@@ -125,6 +137,40 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
     })()
   }
 
+  /**
+   * A barcode never carries a name by itself — only what a previous
+   * remember() or Open Food Facts said the code was, plus whatever a
+   * GS1-128 label's own (310n) field reads as weight. Same merge rule as
+   * handleScan: only fields the lookup actually returned are overwritten.
+   */
+  const handleBarcodeDetected = (raw: string) => {
+    setBarcodeScanning(false)
+    setBarcodeLookupPending(true)
+    setBarcodeError(null)
+    setBarcodeHint(null)
+    void (async () => {
+      try {
+        const result = await lookupBarcode(raw)
+        setForm((current) => ({
+          ...current,
+          name: result.name ?? current.name,
+          quantity: result.quantity ?? current.quantity,
+          unit: result.unit ?? current.unit,
+        }))
+        setPendingBarcode({ itemCode: result.item_code, icon: result.icon })
+        setBarcodeHint(
+          result.name || result.quantity
+            ? 'Código escaneado. Revisa los datos antes de guardar.'
+            : 'Código leído, pero sin información conocida. Completa los campos manualmente.',
+        )
+      } catch (caught) {
+        setBarcodeError(toErrorMessage(caught))
+      } finally {
+        setBarcodeLookupPending(false)
+      }
+    })()
+  }
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     setSaving(true)
@@ -143,6 +189,11 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
     void (async () => {
       try {
         const saved = product ? await replaceProduct(product.id, payload) : await createProduct(payload)
+        if (pendingBarcode) {
+          // Best-effort — see rememberBarcode's own contract. A failed cache
+          // write must not undo an already-successful save.
+          void rememberBarcode(pendingBarcode.itemCode, saved.name, saved.icon).catch(() => {})
+        }
         onSaved(saved)
       } catch (caught) {
         setError(toErrorMessage(caught))
@@ -160,29 +211,60 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
             Only offered when creating: an edit already has real values, and
             re-scanning over them is not a flow this covers. */}
         {!isEdit && (
-          // Explicit htmlFor/id rather than wrapping in a <label>, same
-          // reasoning as Cantidad below: a wrapping label's accessible name
-          // is its full text content, and the status paragraphs here change
-          // while scanning — wrapped, the label's name would grow to include
-          // "Leyendo etiqueta…" while a scan is in flight instead of naming
-          // the control. See #91's IconPicker for the same fix, same reason.
-          <div className="form__field form__scan">
-            <label htmlFor="product-scan">Foto de la etiqueta (opcional)</label>
-            <input
-              id="product-scan"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleScan}
-              disabled={scanning}
-            />
-            {scanning && <p className="settings__hint">Leyendo etiqueta…</p>}
-            {scanError && (
-              <p className="form__error" role="alert">
-                {scanError}
-              </p>
-            )}
-            {scanHint && <p className="settings__hint">{scanHint}</p>}
+          <div className="form__scan">
+            {/* Explicit htmlFor/id rather than wrapping in a <label>, same
+                reasoning as Cantidad below: a wrapping label's accessible
+                name is its full text content, and the status paragraphs
+                here change while scanning — wrapped, the label's name would
+                grow to include "Leyendo etiqueta…" while a scan is in
+                flight instead of naming the control. See #91's IconPicker
+                for the same fix, same reason. */}
+            <div className="form__field">
+              <label htmlFor="product-scan">Foto de la etiqueta (opcional)</label>
+              <input
+                id="product-scan"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleScan}
+                disabled={scanning || barcodeLookupPending}
+              />
+              {scanning && <p className="settings__hint">Leyendo etiqueta…</p>}
+              {scanError && (
+                <p className="form__error" role="alert">
+                  {scanError}
+                </p>
+              )}
+              {scanHint && <p className="settings__hint">{scanHint}</p>}
+            </div>
+
+            {/* A barcode never carries an expiry date — see #30 — so this
+                only ever fills in name/quantity/unit, same partial-
+                overwrite rule as the photo scan above. A separate
+                affordance rather than folded into it: a live camera scan
+                and a photo upload are different enough interactions to
+                need their own button and status. */}
+            <div className="form__field">
+              <span>Código de barras (opcional)</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setBarcodeError(null)
+                  setBarcodeHint(null)
+                  setBarcodeScanning(true)
+                }}
+                disabled={scanning || barcodeLookupPending}
+              >
+                Escanear código de barras
+              </button>
+              {barcodeLookupPending && <p className="settings__hint">Buscando producto…</p>}
+              {barcodeError && (
+                <p className="form__error" role="alert">
+                  {barcodeError}
+                </p>
+              )}
+              {barcodeHint && <p className="settings__hint">{barcodeHint}</p>}
+            </div>
           </div>
         )}
 
@@ -332,6 +414,9 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
           </button>
         </div>
       </form>
+      {barcodeScanning && (
+        <BarcodeScanner onDetected={handleBarcodeDetected} onCancel={() => setBarcodeScanning(false)} />
+      )}
     </Modal>
   )
 }
