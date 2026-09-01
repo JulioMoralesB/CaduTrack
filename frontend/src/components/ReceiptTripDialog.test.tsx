@@ -70,11 +70,17 @@ function product(overrides: Partial<Product> = {}): Product {
   }
 }
 
-function renderDialog(overrides: Partial<ShoppingTrip> = {}) {
+function renderDialog(overrides: Partial<ShoppingTrip> = {}, products: Product[] = []) {
   const onClose = vi.fn()
   const onTripChanged = vi.fn()
   render(
-    <ReceiptTripDialog trip={trip(overrides)} categories={[]} onClose={onClose} onTripChanged={onTripChanged} />,
+    <ReceiptTripDialog
+      trip={trip(overrides)}
+      categories={[]}
+      products={products}
+      onClose={onClose}
+      onTripChanged={onTripChanged}
+    />,
   )
   return { onClose, onTripChanged }
 }
@@ -134,6 +140,40 @@ describe('ReceiptTripDialog review', () => {
 
     expect(screen.getByText('Nopal limpio')).toBeInTheDocument()
     expect(screen.queryByText('Jabón Grisi')).not.toBeInTheDocument()
+  })
+})
+
+describe('ReceiptTripDialog duplicate flagging', () => {
+  // Real, unmocked "now" — see ProductForm.test.tsx's own duplicate-check
+  // block for why this avoids fake timers entirely.
+  function createdToday(): string {
+    return new Date().toISOString()
+  }
+
+  it('starts a same-day match unticked and badged, regardless of is_food', () => {
+    const existing = product({ name: 'Nopal limpio', created_at: createdToday() })
+    renderDialog({ items: [tripItem({ name: 'Nopal limpio', is_food: true })] }, [existing])
+
+    expect(screen.getByRole('checkbox', { name: /nopal limpio/i })).not.toBeChecked()
+    expect(screen.getByText('Ya lo tienes hoy')).toBeInTheDocument()
+  })
+
+  it('still ticks a same-name item from a previous day', () => {
+    const existing = product({ name: 'Nopal limpio', created_at: '2026-08-20T00:00:00Z' })
+    renderDialog({ items: [tripItem({ name: 'Nopal limpio', is_food: true })] }, [existing])
+
+    expect(screen.getByRole('checkbox', { name: /nopal limpio/i })).toBeChecked()
+    expect(screen.queryByText('Ya lo tienes hoy')).not.toBeInTheDocument()
+  })
+
+  it('can still be re-ticked — the flag is a default, not a lock', () => {
+    const existing = product({ name: 'Nopal limpio', created_at: createdToday() })
+    renderDialog({ items: [tripItem({ name: 'Nopal limpio', is_food: true })] }, [existing])
+
+    const checkbox = screen.getByRole('checkbox', { name: /nopal limpio/i })
+    fireEvent.click(checkbox)
+
+    expect(checkbox).toBeChecked()
   })
 })
 
