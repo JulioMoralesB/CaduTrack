@@ -32,6 +32,9 @@ export interface Product {
   icon_source: IconSource
   created_at: string
   updated_at: string
+  /** Null while active. Set only by POST /products/{id}/consume, cleared only
+   *  by POST /products/{id}/restore — see productsService.ts. */
+  consumed_at: string | null
   /** Negative once expired. */
   days_until_expiry: number
   status: ExpiryStatus
@@ -46,7 +49,15 @@ export interface ProductFilters {
 
 export type ProductPayload = Omit<
   Product,
-  'id' | 'category' | 'icon' | 'icon_source' | 'created_at' | 'updated_at' | 'days_until_expiry' | 'status'
+  | 'id'
+  | 'category'
+  | 'icon'
+  | 'icon_source'
+  | 'created_at'
+  | 'updated_at'
+  | 'consumed_at'
+  | 'days_until_expiry'
+  | 'status'
 >
 
 export interface AlertSettings {

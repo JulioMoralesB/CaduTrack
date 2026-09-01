@@ -99,6 +99,23 @@ def test_query_covers_expired_and_upcoming_but_not_the_distant_future(db_session
 
 
 @pytest.mark.integration
+def test_a_consumed_product_is_excluded_even_though_it_is_expired(db_session):
+    """A consumed item already left the fridge — it must not keep nagging
+    the daily alert after being checked off. See #31."""
+    from datetime import datetime, timezone
+
+    consumed = _product("Ya comido", -1)
+    consumed.consumed_at = datetime.now(timezone.utc)
+    db_session.add(consumed)
+    db_session.add(_product("Sin comer", -1))
+    db_session.commit()
+
+    found = products_needing_attention(db_session, days_ahead=7, reference=date(2026, 9, 1))
+
+    assert [p.name for p in found] == ["Sin comer"]
+
+
+@pytest.mark.integration
 def test_nothing_to_report_sends_nothing(db_session):
     """A daily "all good" message trains you to ignore the channel."""
     db_session.add(_product("Lejano", 90))

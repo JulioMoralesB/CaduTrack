@@ -7,11 +7,13 @@ import type { Product } from '@/services/types'
 vi.mock('@/services/productsService', () => ({
   adjustProductQuantity: vi.fn(),
   setProductIcon: vi.fn(),
+  consumeProduct: vi.fn(),
 }))
 
 const products = await import('@/services/productsService')
 const mockedAdjust = vi.mocked(products.adjustProductQuantity)
 const mockedSetIcon = vi.mocked(products.setProductIcon)
+const mockedConsume = vi.mocked(products.consumeProduct)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -32,6 +34,7 @@ function product(overrides: Partial<Product> = {}): Product {
     icon_source: 'lookup',
     created_at: '2026-08-29T00:00:00Z',
     updated_at: '2026-08-29T00:00:00Z',
+    consumed_at: null,
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
@@ -40,6 +43,7 @@ function product(overrides: Partial<Product> = {}): Product {
 
 function renderCard(overrides: Partial<Product> = {}) {
   const onProductChanged = vi.fn()
+  const onConsumed = vi.fn()
   render(
     <ul>
       <ProductCard
@@ -47,10 +51,11 @@ function renderCard(overrides: Partial<Product> = {}) {
         onEdit={vi.fn()}
         onDelete={vi.fn()}
         onProductChanged={onProductChanged}
+        onConsumed={onConsumed}
       />
     </ul>,
   )
-  return { onProductChanged }
+  return { onProductChanged, onConsumed }
 }
 
 describe('ProductCard quantity stepper', () => {
@@ -274,5 +279,45 @@ describe('ProductCard icon override', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(onProductChanged).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
+  })
+})
+
+describe('ProductCard consume action', () => {
+  it('calls the API and notifies the parent with the product id', async () => {
+    mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))
+    const { onConsumed } = renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
+
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1))
+    expect(mockedConsume).toHaveBeenCalledWith(1)
+  })
+
+  it('disables the button while the request is in flight', async () => {
+    let resolveRequest: (product: Product) => void = () => {}
+    mockedConsume.mockReturnValue(
+      new Promise<Product>((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+    renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
+
+    expect(screen.getByRole('button', { name: /marcar plátano como consumido/i })).toBeDisabled()
+    resolveRequest(product({ consumed_at: '2026-08-31T12:00:00Z' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /marcar plátano como consumido/i })).not.toBeDisabled(),
+    )
+  })
+
+  it('shows the failure inline and does not notify the parent', async () => {
+    mockedConsume.mockRejectedValue(new Error('nope'))
+    const { onConsumed } = renderCard()
+
+    fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(onConsumed).not.toHaveBeenCalled()
   })
 })

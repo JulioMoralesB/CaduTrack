@@ -11,6 +11,9 @@ vi.mock('@/services/productsService', () => ({
   deleteProduct: vi.fn(),
   adjustProductQuantity: vi.fn(),
   setProductIcon: vi.fn(),
+  consumeProduct: vi.fn(),
+  listConsumedProducts: vi.fn(),
+  restoreProduct: vi.fn(),
 }))
 
 vi.mock('@/services/categoriesService', () => ({
@@ -24,6 +27,9 @@ const mockedList = vi.mocked(products.listProducts)
 const mockedCreate = vi.mocked(products.createProduct)
 const mockedReplace = vi.mocked(products.replaceProduct)
 const mockedDelete = vi.mocked(products.deleteProduct)
+const mockedConsume = vi.mocked(products.consumeProduct)
+const mockedHistory = vi.mocked(products.listConsumedProducts)
+const mockedRestore = vi.mocked(products.restoreProduct)
 const mockedCategories = vi.mocked(categories.listCategories)
 
 function product(overrides: Partial<Product> = {}): Product {
@@ -41,6 +47,7 @@ function product(overrides: Partial<Product> = {}): Product {
     icon_source: 'lookup',
     created_at: '2026-08-29T00:00:00Z',
     updated_at: '2026-08-29T00:00:00Z',
+    consumed_at: null,
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
@@ -256,6 +263,57 @@ describe('deleting a product', () => {
 
     await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith(1))
     await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('consuming a product', () => {
+  it('removes the card from the list without a full reload', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+    mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Leche entera como consumido' }))
+
+    await waitFor(() => expect(mockedConsume).toHaveBeenCalledWith(1))
+    expect(screen.queryByText('Leche entera')).not.toBeInTheDocument()
+    // No dialog opens for this action, and nothing refetches the list — the
+    // row leaving is proof enough, a second listProducts call would mean it
+    // took the reload path instead of the local removal one.
+    expect(mockedList).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('viewing history', () => {
+  it('lists consumed products and restores one back to the active list', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedHistory.mockResolvedValue([
+      product({ id: 9, name: 'Yogur caducado', consumed_at: '2026-08-30T09:00:00Z' }),
+    ])
+    mockedRestore.mockResolvedValue(product({ id: 9, name: 'Yogur caducado', consumed_at: null }))
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Historial' }))
+
+    expect(await screen.findByText('Yogur caducado')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restaurar Yogur caducado' }))
+
+    await waitFor(() => expect(mockedRestore).toHaveBeenCalledWith(9))
+    // Restoring a history row must refresh the active list behind the dialog,
+    // same as SettingsDialog's onIconsReassigned — otherwise the product
+    // reappears in history's own list but stays invisible in the fridge view
+    // until something unrelated happens to trigger a reload.
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows an empty message when nothing has been consumed yet', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedHistory.mockResolvedValue([])
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Historial' }))
+
+    expect(await screen.findByText('Todavía no has marcado nada como consumido.')).toBeInTheDocument()
   })
 })
 

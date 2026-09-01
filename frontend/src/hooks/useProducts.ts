@@ -21,6 +21,14 @@ interface UseProductsResult {
    * that only ever touches one row and one field.
    */
   replaceProduct: (updated: Product) => void
+  /**
+   * Drop one product from the list without a full reload.
+   *
+   * Built for marking a product consumed: unlike a quantity or icon change,
+   * the row does not get updated in place, it leaves the active list
+   * entirely — replaceProduct would have nowhere to put it back.
+   */
+  removeProduct: (id: number) => void
 }
 
 /**
@@ -102,5 +110,9 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     setProducts((current) => current.map((product) => (product.id === updated.id ? updated : product)))
   }, [])
 
-  return { products, loading, error, cachedAt, reload, replaceProduct }
+  const removeProduct = useCallback((id: number) => {
+    setProducts((current) => current.filter((product) => product.id !== id))
+  }, [])
+
+  return { products, loading, error, cachedAt, reload, replaceProduct, removeProduct }
 }

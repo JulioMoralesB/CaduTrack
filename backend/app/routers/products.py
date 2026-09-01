@@ -4,7 +4,7 @@ import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app import icon_cache, icon_settings_store
@@ -66,6 +66,10 @@ def list_products(
         select(Product)
         # Without this the category of every row is a separate query.
         .options(selectinload(Product.category))
+        # Consumed products live in GET /products/history instead — a product
+        # marked consumed has left the fridge, so it has no business back in
+        # the list that represents what's currently in it.
+        .where(Product.consumed_at.is_(None))
         .order_by(Product.expires_at, Product.name)
     )
 
@@ -76,6 +80,25 @@ def list_products(
     if expires_before is not None:
         statement = statement.where(Product.expires_at < expires_before)
 
+    return list(db.execute(statement).scalars())
+
+
+@router.get("/history", response_model=list[ProductRead])
+def list_consumed_products(db: Session = Depends(get_db)) -> list[Product]:
+    """Consumed products, most recently consumed first.
+
+    Declared ahead of GET /{product_id} deliberately: Starlette matches routes
+    in registration order, and product_id's type annotation is only enforced
+    after a path already matched, so a later declaration here would have
+    "history" swallowed by {product_id} and rejected as a bad int instead of
+    ever reaching this function.
+    """
+    statement = (
+        select(Product)
+        .options(selectinload(Product.category))
+        .where(Product.consumed_at.is_not(None))
+        .order_by(Product.consumed_at.desc())
+    )
     return list(db.execute(statement).scalars())
 
 
@@ -205,6 +228,45 @@ def override_icon(product_id: int, payload: ProductIconUpdate, db: Session = Dep
     db.commit()
     db.refresh(product)
     logger.info("Set product %s (%s) icon to %r manually", product.id, product.name, payload.icon)
+    return product
+
+
+@router.post("/{product_id}/consume", response_model=ProductRead)
+def consume_product(product_id: int, db: Session = Depends(get_db)) -> Product:
+    """Mark a product as consumed, moving it from the active list to history.
+
+    Not a PATCH with a body: there is nothing to send, and the action is not
+    idempotent the way a value-setting PATCH is — see the 409 below, and
+    productsService.ts's consumeProduct, which is deliberately not retried for
+    the same reason as delete: a repeat that follows a success would 409, and
+    the user would be shown an error for an action that already worked.
+    """
+    product = _get_or_404(db, product_id)
+    if product.consumed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Product is already marked as consumed"
+        )
+
+    product.consumed_at = func.now()
+    db.commit()
+    db.refresh(product)
+    logger.info("Marked product %s (%s) as consumed", product.id, product.name)
+    return product
+
+
+@router.post("/{product_id}/restore", response_model=ProductRead)
+def restore_product(product_id: int, db: Session = Depends(get_db)) -> Product:
+    """Undo a consumed mark, returning a product to the active list."""
+    product = _get_or_404(db, product_id)
+    if product.consumed_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Product is not marked as consumed"
+        )
+
+    product.consumed_at = None
+    db.commit()
+    db.refresh(product)
+    logger.info("Restored product %s (%s) from history", product.id, product.name)
     return product
 
 

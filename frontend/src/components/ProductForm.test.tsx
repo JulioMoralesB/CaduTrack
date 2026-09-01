@@ -98,6 +98,7 @@ describe('ProductForm quantity stepper', () => {
       icon_source: 'lookup',
       created_at: '2026-08-29T00:00:00Z',
       updated_at: '2026-08-29T00:00:00Z',
+      consumed_at: null,
       days_until_expiry: 5,
       status: 'expiring_soon',
     }

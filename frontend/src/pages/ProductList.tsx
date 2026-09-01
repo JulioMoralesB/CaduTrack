@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ProductCard } from '@/components/ProductCard'
 import { ProductFilters } from '@/components/ProductFilters'
 import { ProductForm } from '@/components/ProductForm'
+import { ProductHistory } from '@/components/ProductHistory'
 import { StaleBanner } from '@/components/StaleBanner'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import {
@@ -27,10 +28,11 @@ type Dialog =
   | { kind: 'edit'; product: Product }
   | { kind: 'delete'; product: Product }
   | { kind: 'settings' }
+  | { kind: 'history' }
 
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
-  const { products, loading, error, cachedAt, reload, replaceProduct } = useProducts()
+  const { products, loading, error, cachedAt, reload, replaceProduct, removeProduct } = useProducts()
   const categories = useCategories()
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' })
   const [deleting, setDeleting] = useState(false)
@@ -72,6 +74,9 @@ export function ProductList() {
   return (
     <>
       <div className="list-header">
+        <button type="button" onClick={() => setDialog({ kind: 'history' })}>
+          Historial
+        </button>
         <button type="button" onClick={() => setDialog({ kind: 'settings' })}>
           Ajustes
         </button>
@@ -138,6 +143,7 @@ export function ProductList() {
                   onEdit={(target) => setDialog({ kind: 'edit', product: target })}
                   onDelete={(target) => setDialog({ kind: 'delete', product: target })}
                   onProductChanged={replaceProduct}
+                  onConsumed={removeProduct}
                 />
               ))}
             </ul>
@@ -159,6 +165,8 @@ export function ProductList() {
       )}
 
       {dialog.kind === 'settings' && <SettingsDialog onClose={close} onIconsReassigned={reload} />}
+
+      {dialog.kind === 'history' && <ProductHistory onClose={close} onRestored={reload} />}
 
       {dialog.kind === 'delete' && (
         <ConfirmDialog

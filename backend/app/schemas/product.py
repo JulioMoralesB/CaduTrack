@@ -89,6 +89,10 @@ class ProductRead(ProductBase):
     icon_source: IconSource
     created_at: datetime
     updated_at: datetime
+    # Null while active. Set only by POST /products/{id}/consume, cleared only
+    # by POST /products/{id}/restore — never accepted on ProductCreate/Update
+    # for the same reason icon is kept off them (see ProductIconUpdate above).
+    consumed_at: datetime | None = None
 
     @computed_field
     @property

@@ -27,7 +27,8 @@ def products_needing_attention(
 
     Expired items are included deliberately. They are the ones most worth acting
     on, and the action — eat it or bin it and delete the row — is the same one
-    that stops them reappearing tomorrow.
+    that stops them reappearing tomorrow. A consumed item needs no such nudge:
+    it already left the fridge, by the tidier path.
     """
     if days_ahead is None:
         _enabled, _alert_time, days_ahead = read_only(session)
@@ -36,7 +37,7 @@ def products_needing_attention(
     statement = (
         select(Product)
         .options(selectinload(Product.category))
-        .where(Product.expires_at <= horizon)
+        .where(Product.expires_at <= horizon, Product.consumed_at.is_(None))
         .order_by(Product.expires_at, Product.name)
     )
     return list(session.execute(statement).scalars())

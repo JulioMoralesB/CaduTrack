@@ -143,6 +143,8 @@ def test_delete_removes_the_product(api_client):
         ("delete", "/products/9999"),
         ("patch", "/products/9999/quantity"),
         ("patch", "/products/9999/icon"),
+        ("post", "/products/9999/consume"),
+        ("post", "/products/9999/restore"),
     ],
 )
 def test_missing_product_is_404(api_client, method, path):
@@ -519,3 +521,101 @@ def test_reassign_reuses_the_normal_resolution_order_including_the_cache(api_cli
         refreshed = api_client.get(f"/products/{original['id']}").json()
         assert refreshed["icon"] == "\U0001F31F"
         assert refreshed["icon_source"] == "ai"
+
+
+# ── Consume / restore / history (#31) ────────────────────────────────────────
+
+
+def test_consuming_a_product_removes_it_from_the_active_list(api_client):
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+
+    response = api_client.post(f"/products/{product_id}/consume")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["consumed_at"] is not None
+    assert api_client.get("/products").json() == []
+
+
+def test_a_newly_created_product_reports_consumed_at_as_null(api_client):
+    product = api_client.post("/products", json=_product()).json()
+    assert product["consumed_at"] is None
+
+
+def test_consuming_twice_is_rejected_rather_than_silently_reapplied(api_client):
+    """Mirrors delete's own non-retry stance (see productsService.ts): a
+    second consume is a real conflict, not a no-op, so a client that retries
+    blindly gets a clear signal instead of a quietly stale timestamp."""
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+    api_client.post(f"/products/{product_id}/consume")
+
+    response = api_client.post(f"/products/{product_id}/consume")
+
+    assert response.status_code == 409
+
+
+def test_restoring_a_consumed_product_returns_it_to_the_active_list(api_client):
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+    api_client.post(f"/products/{product_id}/consume")
+
+    response = api_client.post(f"/products/{product_id}/restore")
+
+    assert response.status_code == 200
+    assert response.json()["consumed_at"] is None
+    assert [p["id"] for p in api_client.get("/products").json()] == [product_id]
+
+
+def test_restoring_a_product_that_was_never_consumed_is_rejected(api_client):
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+
+    response = api_client.post(f"/products/{product_id}/restore")
+
+    assert response.status_code == 409
+
+
+def test_history_lists_only_consumed_products_most_recent_first(api_client):
+    first = api_client.post("/products", json=_product(name="Yogur")).json()["id"]
+    second = api_client.post("/products", json=_product(name="Queso")).json()["id"]
+    api_client.post("/products", json=_product(name="Arroz"))  # left active
+
+    api_client.post(f"/products/{first}/consume")
+    api_client.post(f"/products/{second}/consume")
+
+    history = api_client.get("/products/history").json()
+
+    assert [p["id"] for p in history] == [second, first]
+    assert all(p["consumed_at"] is not None for p in history)
+
+
+def test_history_is_empty_until_something_is_consumed(api_client):
+    api_client.post("/products", json=_product())
+    assert api_client.get("/products/history").json() == []
+
+
+@pytest.mark.integration
+def test_consuming_actually_commits_not_just_the_in_session_object(api_client, db_session):
+    """Same reasoning as test_reassign_actually_commits above: api_client and
+    db_session share one SQLAlchemy session in this fixture, so only a fresh
+    read after expiring the identity map proves the UPDATE reached the
+    database rather than just this test's in-memory object."""
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+
+    api_client.post(f"/products/{product_id}/consume")
+    db_session.expire_all()
+
+    assert api_client.get("/products/history").json()[0]["id"] == product_id
+
+
+def test_filters_still_apply_within_the_active_list_once_something_is_consumed(api_client):
+    """Guards against a filter clause accidentally undoing the consumed_at
+    exclusion by replacing rather than composing with it."""
+    today = date.today()
+    fridge_id = api_client.post(
+        "/products", json=_product(name="Yogur", location="fridge", expires_at=str(today + timedelta(days=3)))
+    ).json()["id"]
+    api_client.post(
+        "/products", json=_product(name="Arroz", location="pantry", expires_at=str(today + timedelta(days=200)))
+    )
+    api_client.post(f"/products/{fridge_id}/consume")
+
+    assert api_client.get("/products", params={"location": "fridge"}).json() == []
