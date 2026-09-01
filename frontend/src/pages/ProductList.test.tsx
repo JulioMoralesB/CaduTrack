@@ -139,14 +139,19 @@ describe('ProductList', () => {
     expect(screen.queryByText(/reautentícate/i)).not.toBeInTheDocument()
   })
 
-  it('offers a Cloudflare Access reauth link when the backend looks unreachable', async () => {
+  it('offers a same-window Cloudflare Access reauth link when the backend looks unreachable', async () => {
+    // Same window, deliberately: the PWA is the primary way this app is
+    // used, and an installed PWA typically has nowhere to open a second tab
+    // — see ProductList.tsx's own comment. A target="_blank" here would
+    // leave the user stuck switching between two separate apps instead of
+    // just navigating away and back.
     mockedList.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'))
 
     render(<ProductList />)
 
-    const link = await screen.findByRole('link', { name: /reautentícate en una pestaña nueva/i })
-    expect(link).toHaveAttribute('href', `${window.location.origin}/api/products`)
-    expect(link).toHaveAttribute('target', '_blank')
+    const link = await screen.findByRole('link', { name: /reautentícate aquí/i })
+    expect(link).toHaveAttribute('href', `${window.location.origin}/api/reauth`)
+    expect(link).not.toHaveAttribute('target')
   })
 })
 

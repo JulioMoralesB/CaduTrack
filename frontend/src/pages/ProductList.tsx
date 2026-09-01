@@ -100,16 +100,18 @@ export function ProductList() {
               see api.ts's isUnreachable — which otherwise fails the exact
               same way forever: a fetch can never complete Access's
               interactive login on its own, only a real top-level navigation
-              to a protected URL can. Harmless when the real cause is just
-              the server being down: the link opens, finds nothing useful,
-              and the user is no worse off than before it existed. */}
+              to a protected URL can. Same-window on purpose, not a new tab:
+              the PWA is the primary way this app is used, and an installed
+              PWA typically has nowhere to open a second tab — this instead
+              navigates away and back through /reauth, a small backend page
+              that sends the browser straight back to "/" once Access lets
+              the request through. Harmless when the real cause is just the
+              server being down: the navigation fails to load, and the user
+              is no worse off than before it existed. */}
           {unreachable && (
             <p className="state__hint">
-              Si tu sesión expiró,{' '}
-              <a href={apiUrl('/products')} target="_blank" rel="noopener noreferrer">
-                reautentícate en una pestaña nueva
-              </a>{' '}
-              y vuelve a intentar.
+              Si tu sesión expiró, <a href={apiUrl('/reauth')}>reautentícate aquí</a> — te regresa
+              solo cuando termines.
             </p>
           )}
           <button type="button" onClick={reload}>
