@@ -167,18 +167,22 @@ def test_the_http_client_cannot_publish_the_bot_token():
     previous_level = root.level
     root.setLevel(logging.DEBUG)
 
-    fake_token = "8670436717:AAG67gC_ue0EdBGryoKJN4oY6nILucfRMrM"
+    # Built by concatenation, and never pasted as a literal. The value only
+    # has to carry the *shape* of a bot token for this test to mean anything,
+    # and a real one here would be published by the very test that exists to
+    # keep it out of the logs. See CLAUDE.md.
+    token_shaped_value = "1234567890:" + "A" * 35
     try:
         logging.getLogger("httpx").info(
             'HTTP Request: POST https://api.telegram.org/bot%s/sendMessage "HTTP/1.1 200 OK"',
-            fake_token,
+            token_shaped_value,
         )
         logging.getLogger("httpcore").info("connect_tcp.started host='api.telegram.org'")
     finally:
         root.removeHandler(handler)
         root.setLevel(previous_level)
 
-    assert fake_token not in stream.getvalue()
+    assert token_shaped_value not in stream.getvalue()
     # The mechanism, asserted directly: the record is never created at all.
     assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
 
