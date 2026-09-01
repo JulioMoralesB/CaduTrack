@@ -17,10 +17,14 @@ import type { LabelExtraction } from '@/services/types'
  * already look like JSON — reproduced directly against the real backend,
  * which received a 422 "field required" for `image` without this override,
  * because the file never left as multipart at all.
+ *
+ * Takes a Blob, not specifically a File: the caller downscales through
+ * downscaleImage.ts first, which produces a plain Blob — canvas re-encoding
+ * has no filename to preserve, so one is supplied here instead.
  */
-export async function extractLabel(image: File): Promise<LabelExtraction> {
+export async function extractLabel(image: Blob): Promise<LabelExtraction> {
   const form = new FormData()
-  form.append('image', image)
+  form.append('image', image, 'label.jpg')
   const { data } = await api.post<LabelExtraction>('/vision/label', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

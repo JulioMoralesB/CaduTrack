@@ -27,7 +27,13 @@ describe('visionService', () => {
     const [path, body] = mockedApi.post.mock.calls[0]
     expect(path).toBe('/vision/label')
     expect(body).toBeInstanceOf(FormData)
-    expect((body as FormData).get('image')).toBe(image)
+    // Not toBe(image): a caller may pass a plain Blob (downscaleImage.ts's
+    // canvas output has no filename of its own), so this always attaches
+    // one explicitly — the appended value is a fresh File wrapping the same
+    // bytes, not the original reference.
+    const attached = (body as FormData).get('image') as File
+    expect(attached.name).toBe('label.jpg')
+    expect(await attached.text()).toBe(await image.text())
   })
 
   it('overrides the default JSON content type, or axios silently stringifies the file away', async () => {

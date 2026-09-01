@@ -1,6 +1,7 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
+import { downscaleImage } from '@/downscaleImage'
 import { LOCATION_LABELS } from '@/labels'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
@@ -91,7 +92,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
     setScanHint(null)
     void (async () => {
       try {
-        const extracted = await extractLabel(file)
+        const extracted = await extractLabel(await downscaleImage(file))
         setForm((current) => ({
           ...current,
           name: extracted.name ?? current.name,

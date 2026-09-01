@@ -26,12 +26,15 @@ from app.schemas.vision import LabelExtraction
 
 logger = logging.getLogger(__name__)
 
-# Measured directly against the real server: a warm qwen3.5:4b answers a
-# ~700x500 test label in 1.5-2s. A real phone photo is larger and a cold
-# model load has measured at 6.7s for the (much cheaper) icon prompt alone —
-# 30s leaves real room for both without leaving a genuinely unreachable
-# Ollama able to stall product creation for long.
-TIMEOUT_SECONDS = 30.0
+# Measured directly against the real server, at the resolution the frontend
+# now actually sends (downscaled to 1600px on the long edge — see
+# downscaleImage.ts; a full 3024x4032 phone photo measured 61.5s on this same
+# server, more than double this whole budget, which is what motivated
+# downscaling in the first place rather than just raising this further): a
+# cold model load answered a downscaled real label in 23.8s, warm in 1.4s.
+# 45s leaves real headroom over that cold measurement without leaving a
+# genuinely unreachable Ollama able to stall product creation for long.
+TIMEOUT_SECONDS = 45.0
 
 # Grammar-constrained decoding, same as the icon client — a free-text prompt
 # is not reliable enough to parse for a field this consequential.
@@ -120,6 +123,18 @@ def extract_label(image_bytes: bytes) -> LabelExtraction | None:
             timeout=TIMEOUT_SECONDS,
         )
         response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Previously logged as just "HTTPStatusError" — the class name alone,
+        # with the actual status and Ollama's own explanation of it thrown
+        # away. Found live: a real photo failing with no way to tell whether
+        # Ollama rejected the request outright or crashed trying to process
+        # it, without shelling into the server to read its own logs.
+        logger.warning(
+            "Ollama label extraction returned %s: %r",
+            exc.response.status_code,
+            exc.response.text[:500],
+        )
+        return None
     except httpx.HTTPError as exc:
         logger.warning("Ollama label extraction failed: %s", exc.__class__.__name__)
         return None
