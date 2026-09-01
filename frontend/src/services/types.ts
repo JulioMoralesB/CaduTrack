@@ -107,3 +107,16 @@ export interface IconReassignmentResult {
   updated: number
   still_default: number
 }
+
+/**
+ * Best-effort fields read from a photo of a product label — see #83 and
+ * POST /vision/label. Any field may be null when the model could not
+ * determine it with confidence. Field names match ProductPayload
+ * deliberately so a caller can spread this straight into form state.
+ */
+export interface LabelExtraction {
+  name: string | null
+  expires_at: string | null
+  quantity: string | null
+  unit: string | null
+}

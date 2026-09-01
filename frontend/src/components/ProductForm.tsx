@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { LOCATION_LABELS } from '@/labels'
@@ -6,6 +6,7 @@ import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
 import { createProduct, replaceProduct } from '@/services/productsService'
 import type { Category, Location, Product, ProductPayload } from '@/services/types'
+import { extractLabel } from '@/services/visionService'
 
 interface ProductFormProps {
   /** Omit to create; pass a product to edit it. */
@@ -48,6 +49,10 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
+  const [scanHint, setScanHint] = useState<string | null>(null)
+
   const isEdit = product !== undefined
 
   // Categories arrive asynchronously. Until they do, a select whose value has
@@ -64,6 +69,48 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
 
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
+
+  /**
+   * The photo is an accuracy shortcut, not a separate flow: it fills in
+   * whatever the model was confident about and leaves the rest exactly as
+   * it was, so the same "confirm in the form, then Guardar" path handles a
+   * photo, a fully typed entry, and everything in between — never a silent
+   * save. Only fields the model actually returned are overwritten, so a
+   * partial read (say, a date but no readable weight) does not clobber a
+   * quantity the user already typed by hand.
+   */
+  const handleScan = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    // Cleared immediately so scanning the same photo again — e.g. after a
+    // failure — fires a change event the second time too.
+    event.target.value = ''
+    if (!file) return
+
+    setScanning(true)
+    setScanError(null)
+    setScanHint(null)
+    void (async () => {
+      try {
+        const extracted = await extractLabel(file)
+        setForm((current) => ({
+          ...current,
+          name: extracted.name ?? current.name,
+          expires_at: extracted.expires_at ?? current.expires_at,
+          quantity: extracted.quantity ?? current.quantity,
+          unit: extracted.unit ?? current.unit,
+        }))
+        setScanHint(
+          extracted.name || extracted.expires_at || extracted.quantity
+            ? 'Foto leída. Revisa los datos antes de guardar.'
+            : 'No se pudo leer nada de la foto. Completa los campos manualmente.',
+        )
+      } catch (caught) {
+        setScanError(toErrorMessage(caught))
+      } finally {
+        setScanning(false)
+      }
+    })()
+  }
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -99,6 +146,37 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   return (
     <Modal title={isEdit ? 'Editar producto' : 'Agregar producto'} onClose={onCancel}>
       <form className="form" onSubmit={handleSubmit}>
+        {/* The photo is the entry point, not an afterthought — see #83 — so
+            it comes first, above manual entry rather than buried below it.
+            Only offered when creating: an edit already has real values, and
+            re-scanning over them is not a flow this covers. */}
+        {!isEdit && (
+          // Explicit htmlFor/id rather than wrapping in a <label>, same
+          // reasoning as Cantidad below: a wrapping label's accessible name
+          // is its full text content, and the status paragraphs here change
+          // while scanning — wrapped, the label's name would grow to include
+          // "Leyendo etiqueta…" while a scan is in flight instead of naming
+          // the control. See #91's IconPicker for the same fix, same reason.
+          <div className="form__field form__scan">
+            <label htmlFor="product-scan">Foto de la etiqueta (opcional)</label>
+            <input
+              id="product-scan"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleScan}
+              disabled={scanning}
+            />
+            {scanning && <p className="settings__hint">Leyendo etiqueta…</p>}
+            {scanError && (
+              <p className="form__error" role="alert">
+                {scanError}
+              </p>
+            )}
+            {scanHint && <p className="settings__hint">{scanHint}</p>}
+          </div>
+        )}
+
         <label className="form__field">
           <span>Nombre</span>
           <input
