@@ -83,6 +83,16 @@ textarea {
   color: var(--text);
 }
 
+/* Left at the browser default otherwise: plain blue, on every theme,
+   checkbox or radio in the app — noticeable now next to the receipt
+   checklist's own row of them, but was already true of the settings
+   toggles too. accent-color is the one-line fix modern browsers support
+   for native controls, no custom-drawn checkbox needed. */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+}
+
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,

@@ -133,13 +133,42 @@ export function ProductList() {
 
   return (
     <>
+      {/* Historial and Ajustes are navigation to a different view, not
+          content-creation — visually distinct on purpose, as small icon
+          buttons next to the title, so they stop competing with Recibo and
+          Agregar producto for the same row and the same weight. That
+          crowding is also what was cutting Historial off on a real phone
+          before this. Emoji glyphs, not an icon font: matches how every
+          product icon in this app already communicates meaning, and adds
+          no new dependency for two buttons. */}
+      <header className="app__header">
+        <div className="app__header-top">
+          <div>
+            <h1>CaduTrack</h1>
+            <p className="app__tagline">Lo que caduca primero, primero</p>
+          </div>
+          <div className="app__header-actions">
+            <button
+              type="button"
+              className="app__icon-button"
+              onClick={() => setDialog({ kind: 'history' })}
+              aria-label="Historial"
+            >
+              <span aria-hidden="true">🕘</span>
+            </button>
+            <button
+              type="button"
+              className="app__icon-button"
+              onClick={() => setDialog({ kind: 'settings' })}
+              aria-label="Ajustes"
+            >
+              <span aria-hidden="true">⚙️</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
       <div className="list-header">
-        <button type="button" onClick={() => setDialog({ kind: 'history' })}>
-          Historial
-        </button>
-        <button type="button" onClick={() => setDialog({ kind: 'settings' })}>
-          Ajustes
-        </button>
         {/* A real click on a hidden input, not a wrapping <label>: the label
             text here would otherwise absorb "Leyendo…" into its own
             accessible name while a scan is in flight — see #83's own note

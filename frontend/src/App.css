@@ -10,6 +10,13 @@
   padding: 0.5rem 0 1.25rem;
 }
 
+.app__header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .app__header h1 {
   font-size: 1.5rem;
   letter-spacing: -0.02em;
@@ -18,6 +25,27 @@
 .app__tagline {
   color: var(--text-muted);
   font-size: 0.875rem;
+}
+
+.app__header-actions {
+  display: flex;
+  gap: 0.5rem;
+  /* Lines up with the title's own cap-height instead of the tagline below
+     it — these buttons belong to "CaduTrack", not to the sentence under it. */
+  margin-top: 0.125rem;
+}
+
+.app__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
 }
 
 .product-list {
@@ -224,11 +252,18 @@
   }
 }
 
+/* Just the two content-creation actions now — Historial and Ajustes moved
+   into app__header-actions, see App.css's own note there. Equal width
+   rather than flex-end: with only two buttons left, filling the row reads
+   as one deliberate choice instead of two buttons stranded on one side. */
 .list-header {
   display: flex;
-  justify-content: flex-end;
   gap: 0.5rem;
   padding-bottom: 0.875rem;
+}
+
+.list-header > button {
+  flex: 1;
 }
 
 .product-card__side {
@@ -645,6 +680,18 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+}
+
+/* index.css's global `input { width: 100% }` targets every input, checkbox
+   included — the same conflict form__field--inline already works around for
+   the settings toggles. Without it the checkbox claims most of the row
+   (measured directly: 141px of a 284px-wide label), squeezing the name into
+   a few characters before its own ellipsis and shifting each row's checkbox
+   to a different width depending on how much text is next to it — which is
+   the inconsistent left edge, not a spacing bug. */
+.trip-checklist__label input {
+  width: auto;
+  flex-shrink: 0;
 }
 
 .trip-checklist__name {
