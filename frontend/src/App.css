@@ -366,6 +366,27 @@
   justify-content: flex-end;
   gap: 0.625rem;
   padding-top: 0.375rem;
+  flex-wrap: wrap;
+}
+
+/* Same status-stripe language as a product card's own expiring-soon
+   border — this is exactly that kind of "look before you proceed" beat. */
+.form__duplicate-warning {
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--status-expiring-soon);
+  border-radius: 0.625rem;
+  background: var(--surface);
+}
+
+.form__duplicate-warning p {
+  margin: 0 0 0.625rem;
+  font-size: 0.875rem;
+}
+
+.form__duplicate-warning .form__actions {
+  justify-content: flex-start;
+  padding-top: 0;
 }
 
 /* Sized in em so it tracks the button's text, and drawn in currentColor so it
@@ -712,8 +733,24 @@
 }
 
 .trip-checklist__name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Same status color as a card's own expiring-soon stripe — a lighter-weight
+   "heads up" than the full form__duplicate-warning box a ticked item's own
+   ProductForm would otherwise be the first place to show this. */
+.trip-checklist__badge {
+  flex-shrink: 0;
+  padding: 0.125rem 0.45rem;
+  border-radius: 999px;
+  background: var(--status-expiring-soon);
+  color: var(--on-fill);
+  font-size: 0.6875rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 

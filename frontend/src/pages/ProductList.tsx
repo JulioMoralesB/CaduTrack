@@ -292,13 +292,14 @@ export function ProductList() {
       )}
 
       {dialog.kind === 'create' && (
-        <ProductForm categories={categories} onSaved={handleSaved} onCancel={close} />
+        <ProductForm categories={categories} products={products} onSaved={handleSaved} onCancel={close} />
       )}
 
       {dialog.kind === 'edit' && (
         <ProductForm
           product={dialog.product}
           categories={categories}
+          products={products}
           onSaved={handleSaved}
           onCancel={close}
         />
@@ -312,6 +313,7 @@ export function ProductList() {
         <ReceiptTripDialog
           trip={currentTrip}
           categories={categories}
+          products={products}
           onClose={close}
           onTripChanged={handleTripChanged}
         />

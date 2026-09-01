@@ -7,6 +7,7 @@ import type { BarcodeLookupResult, LabelExtraction, Product } from '@/services/t
 vi.mock('@/services/productsService', () => ({
   createProduct: vi.fn(),
   replaceProduct: vi.fn(),
+  adjustProductQuantity: vi.fn(),
 }))
 
 vi.mock('@/services/visionService', () => ({
@@ -38,6 +39,7 @@ const products = await import('@/services/productsService')
 const vision = await import('@/services/visionService')
 const barcodes = await import('@/services/barcodesService')
 const mockedCreate = vi.mocked(products.createProduct)
+const mockedAdjustQuantity = vi.mocked(products.adjustProductQuantity)
 const mockedExtract = vi.mocked(vision.extractLabel)
 const mockedLookupBarcode = vi.mocked(barcodes.lookupBarcode)
 const mockedRememberBarcode = vi.mocked(barcodes.rememberBarcode)
@@ -109,7 +111,7 @@ describe('ProductForm while saving', () => {
     const onSaved = vi.fn()
 
     const { container } = render(
-      <ProductForm categories={[]} onSaved={onSaved} onCancel={vi.fn()} />,
+      <ProductForm categories={[]} products={[]} onSaved={onSaved} onCancel={vi.fn()} />,
     )
     fillAndSubmit()
 
@@ -129,7 +131,7 @@ describe('ProductForm while saving', () => {
     mockedCreate.mockRejectedValue(new Error('nope'))
 
     const { container } = render(
-      <ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />,
+      <ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />,
     )
     fillAndSubmit()
 
@@ -141,13 +143,13 @@ describe('ProductForm while saving', () => {
 
 describe('ProductForm quantity stepper', () => {
   it('hides "−" at the default quantity of 1', () => {
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     expect(screen.queryByRole('button', { name: 'Reducir cantidad' })).not.toBeInTheDocument()
   })
 
   it('shows "−" again once "+" has been pressed, and hides it once stepped back to 1', () => {
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Aumentar cantidad' }))
     expect(screen.getByRole('button', { name: 'Reducir cantidad' })).toBeInTheDocument()
@@ -176,7 +178,7 @@ describe('ProductForm quantity stepper', () => {
       status: 'expiring_soon',
     }
 
-    render(<ProductForm product={product} categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm product={product} categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     expect(screen.getByRole('button', { name: 'Reducir cantidad' })).toBeInTheDocument()
   })
@@ -203,11 +205,11 @@ describe('ProductForm label scan', () => {
       status: 'expiring_soon',
     }
 
-    const { unmount } = render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    const { unmount } = render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByLabelText('Foto de la etiqueta (opcional)')).toBeInTheDocument()
     unmount()
 
-    render(<ProductForm product={product} categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm product={product} categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.queryByLabelText('Foto de la etiqueta (opcional)')).not.toBeInTheDocument()
   })
 
@@ -215,7 +217,7 @@ describe('ProductForm label scan', () => {
     mockedExtract.mockResolvedValue(
       labelExtraction({ name: 'Nopal limpio', expires_at: '2026-09-01', quantity: '0.59', unit: 'kg' }),
     )
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     selectPhoto()
 
@@ -228,7 +230,7 @@ describe('ProductForm label scan', () => {
 
   it('leaves a field the model could not read untouched', async () => {
     mockedExtract.mockResolvedValue(labelExtraction({ name: 'Nopal limpio' }))
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Unidad'), { target: { value: 'piezas' } })
 
     selectPhoto()
@@ -241,7 +243,7 @@ describe('ProductForm label scan', () => {
 
   it('says so when nothing in the photo could be read', async () => {
     mockedExtract.mockResolvedValue(labelExtraction())
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     selectPhoto()
 
@@ -252,7 +254,7 @@ describe('ProductForm label scan', () => {
 
   it('shows the failure inline and leaves the rest of the form usable', async () => {
     mockedExtract.mockRejectedValue(new Error('nope'))
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     selectPhoto()
 
@@ -269,7 +271,7 @@ describe('ProductForm label scan', () => {
         resolveRequest = resolve
       }),
     )
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     selectPhoto()
 
@@ -292,11 +294,11 @@ describe('ProductForm barcode scan', () => {
   })
 
   it('offers the scan button when creating, not when editing', () => {
-    const { unmount } = render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    const { unmount } = render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Escanear código de barras' })).toBeInTheDocument()
     unmount()
 
-    render(<ProductForm product={fakeProduct()} categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm product={fakeProduct()} categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Escanear código de barras' })).not.toBeInTheDocument()
   })
 
@@ -304,7 +306,7 @@ describe('ProductForm barcode scan', () => {
     mockedLookupBarcode.mockResolvedValue(
       barcodeLookupResult({ name: 'Nopal limpio', quantity: '0.59', unit: 'kg' }),
     )
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     scanBarcode()
 
@@ -319,7 +321,7 @@ describe('ProductForm barcode scan', () => {
 
   it('leaves a field the lookup could not resolve untouched', async () => {
     mockedLookupBarcode.mockResolvedValue(barcodeLookupResult({ name: 'Nopal limpio' }))
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Unidad'), { target: { value: 'piezas' } })
 
     scanBarcode()
@@ -330,7 +332,7 @@ describe('ProductForm barcode scan', () => {
 
   it('says so when a restricted-circulation code carries no known name', async () => {
     mockedLookupBarcode.mockResolvedValue(barcodeLookupResult())
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     scanBarcode()
 
@@ -341,7 +343,7 @@ describe('ProductForm barcode scan', () => {
 
   it('shows the failure inline and leaves the rest of the form usable', async () => {
     mockedLookupBarcode.mockRejectedValue(new Error('nope'))
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     scanBarcode()
 
@@ -351,7 +353,7 @@ describe('ProductForm barcode scan', () => {
   })
 
   it('closes on cancel without touching the form', () => {
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Escanear código de barras' }))
     fireEvent.click(screen.getByRole('button', { name: 'fake-cancel-scan' }))
@@ -366,7 +368,7 @@ describe('ProductForm barcode scan', () => {
     const saved = fakeProduct({ name: 'Nopal limpio (confirmado)', icon: '\u{1F955}' })
     mockedCreate.mockResolvedValue(saved)
     const onSaved = vi.fn()
-    render(<ProductForm categories={[]} onSaved={onSaved} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={onSaved} onCancel={vi.fn()} />)
 
     scanBarcode()
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
@@ -383,7 +385,7 @@ describe('ProductForm barcode scan', () => {
 
   it('does not remember anything when no barcode was ever scanned', async () => {
     mockedCreate.mockResolvedValue(fakeProduct())
-    render(<ProductForm categories={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     fillAndSubmit()
 
@@ -397,7 +399,7 @@ describe('ProductForm barcode scan', () => {
     const saved = fakeProduct()
     mockedCreate.mockResolvedValue(saved)
     const onSaved = vi.fn()
-    render(<ProductForm categories={[]} onSaved={onSaved} onCancel={vi.fn()} />)
+    render(<ProductForm categories={[]} products={[]} onSaved={onSaved} onCancel={vi.fn()} />)
 
     scanBarcode()
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
@@ -405,5 +407,118 @@ describe('ProductForm barcode scan', () => {
     fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
+  })
+})
+
+describe('ProductForm duplicate check', () => {
+  // Nothing else in this file resets mocks between tests — see the
+  // barcode-scan describe above for the same fix, same reason.
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Real, unmocked "now" throughout — findDuplicateToday compares calendar
+  // days with new Date(), and matching that against a fixed fake date would
+  // put fake timers in the way of every await waitFor(...) below, which
+  // relies on real timers to poll.
+  function createdToday(): string {
+    return new Date().toISOString()
+  }
+
+  function createdYesterday(): string {
+    return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  }
+
+  it('shows the three-way choice instead of saving, when the name matches an active product created today', () => {
+    const existing = fakeProduct({ id: 9, name: 'Nopal limpio', quantity: '0.50', unit: 'kg', created_at: createdToday() })
+    render(<ProductForm categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fillAndSubmit()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Ya agregaste "Nopal limpio" hoy (0.5 kg)')
+    expect(screen.getByRole('button', { name: 'Agregar de todas formas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sumar a la cantidad existente' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Omitir' })).toBeInTheDocument()
+    expect(mockedCreate).not.toHaveBeenCalled()
+  })
+
+  it('does not flag a product with the same name created on a previous day', () => {
+    const existing = fakeProduct({ name: 'Nopal limpio', created_at: createdYesterday() })
+    mockedCreate.mockResolvedValue(fakeProduct())
+    render(<ProductForm categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fillAndSubmit()
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockedCreate).toHaveBeenCalledOnce()
+  })
+
+  it('does not check for a duplicate when editing — a product can never duplicate itself', async () => {
+    const existing = fakeProduct({ id: 3, name: 'Nopal limpio', created_at: createdToday() })
+    const mockedReplace = vi.mocked(products.replaceProduct)
+    mockedReplace.mockResolvedValue(existing)
+    render(<ProductForm product={existing} categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+
+    await waitFor(() => expect(mockedReplace).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('button', { name: 'Omitir' })).not.toBeInTheDocument()
+  })
+
+  it('"Agregar de todas formas" creates a second product as normal', async () => {
+    const existing = fakeProduct({ name: 'Nopal limpio', created_at: createdToday() })
+    const saved = fakeProduct({ id: 20 })
+    mockedCreate.mockResolvedValue(saved)
+    const onSaved = vi.fn()
+    render(<ProductForm categories={[]} products={[existing]} onSaved={onSaved} onCancel={vi.fn()} />)
+    fillAndSubmit()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar de todas formas' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
+    expect(mockedCreate).toHaveBeenCalledOnce()
+  })
+
+  it('"Sumar a la cantidad existente" adjusts the existing product instead of creating a new one', async () => {
+    const existing = fakeProduct({ id: 9, name: 'Nopal limpio', created_at: createdToday() })
+    const updated = fakeProduct({ id: 9, name: 'Nopal limpio', quantity: '1.50' })
+    mockedAdjustQuantity.mockResolvedValue(updated)
+    const onSaved = vi.fn()
+    render(<ProductForm categories={[]} products={[existing]} onSaved={onSaved} onCancel={vi.fn()} />)
+    fillAndSubmit()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sumar a la cantidad existente' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated))
+    expect(mockedAdjustQuantity).toHaveBeenCalledWith(9, 1)
+    expect(mockedCreate).not.toHaveBeenCalled()
+  })
+
+  it('"Omitir" adds nothing and defers to onCancel, same as skipping any other add', () => {
+    const existing = fakeProduct({ name: 'Nopal limpio', created_at: createdToday() })
+    const onCancel = vi.fn()
+    render(<ProductForm categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={onCancel} />)
+    fillAndSubmit()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
+
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(mockedCreate).not.toHaveBeenCalled()
+    expect(mockedAdjustQuantity).not.toHaveBeenCalled()
+  })
+
+  it('clears a stale warning once the name is edited, so the next submit re-checks against the new name', () => {
+    const existing = fakeProduct({ name: 'Nopal limpio', created_at: createdToday() })
+    mockedCreate.mockResolvedValue(fakeProduct())
+    render(<ProductForm categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    fillAndSubmit()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nopal limpio, otra marca' } })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
+    expect(mockedCreate).toHaveBeenCalledOnce()
   })
 })

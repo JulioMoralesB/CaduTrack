@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { ProductForm } from '@/components/ProductForm'
+import { findDuplicateToday } from '@/duplicateCheck'
 import { quantityLabel } from '@/labels'
 import { toErrorMessage } from '@/services/api'
 import { dropTripItem, resolveTripItem } from '@/services/tripsService'
@@ -10,6 +11,10 @@ import type { Category, Product, ShoppingTrip, ShoppingTripItem } from '@/servic
 interface ReceiptTripDialogProps {
   trip: ShoppingTrip
   categories: Category[]
+  /** The active product list, threaded down to this dialog's own
+   *  ProductForm and used here too, to flag a checklist line that looks
+   *  like it was already added today — see #108. */
+  products: Product[]
   onClose: () => void
   /** Called whenever an item is dropped or resolved, so the active product
    *  list and the "current trip" banner stay in sync without a second
@@ -38,12 +43,19 @@ function itemState(item: ShoppingTripItem): ItemState {
  * because #83's own photo-of-the-label scan is exactly what a user reaches
  * for here, and that only makes sense pointed at a single product.
  */
-export function ReceiptTripDialog({ trip, categories, onClose, onTripChanged }: ReceiptTripDialogProps) {
+export function ReceiptTripDialog({ trip, categories, products, onClose, onTripChanged }: ReceiptTripDialogProps) {
   const [items, setItems] = useState(trip.items)
   // Only the pending items need a tick; a dropped or added item does not
-  // come back to this map even if a later action revisits it.
+  // come back to this map even if a later action revisits it. A line that
+  // looks like it was already added today starts unticked regardless of
+  // is_food — see #108: the receipt scan doubling as a final verification
+  // pass only works if the likely-duplicates are the ones pre-skipped.
   const [ticked, setTicked] = useState<Record<number, boolean>>(() =>
-    Object.fromEntries(trip.items.filter((item) => item.resolved_at === null).map((item) => [item.id, item.is_food])),
+    Object.fromEntries(
+      trip.items
+        .filter((item) => item.resolved_at === null)
+        .map((item) => [item.id, item.is_food && findDuplicateToday(products, item.name) === null]),
+    ),
   )
   const [queue, setQueue] = useState<ShoppingTripItem[] | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -121,6 +133,7 @@ export function ReceiptTripDialog({ trip, categories, onClose, onTripChanged }: 
       <ProductForm
         key={current.id}
         categories={categories}
+        products={products}
         prefill={{ name: current.name, quantity: current.quantity }}
         title={remaining === 1 ? 'Agregar producto' : `Agregar producto (quedan ${remaining})`}
         onSaved={handleItemSaved}
@@ -166,19 +179,32 @@ export function ReceiptTripDialog({ trip, categories, onClose, onTripChanged }: 
         <p className="state state--empty">Ya no quedan productos pendientes en este recibo.</p>
       ) : (
         <ul className="trip-checklist">
-          {pending.map((item) => (
-            <li key={item.id} className="trip-checklist__row">
-              <label className="trip-checklist__label">
-                <input
-                  type="checkbox"
-                  checked={ticked[item.id] ?? item.is_food}
-                  onChange={() => toggle(item.id)}
-                />
-                <span className="trip-checklist__name">{item.name}</span>
-              </label>
-              <span className="trip-checklist__quantity">{quantityLabel(item.quantity, null)}</span>
-            </li>
-          ))}
+          {pending.map((item) => {
+            const duplicate = findDuplicateToday(products, item.name)
+            return (
+              <li key={item.id} className="trip-checklist__row">
+                <label className="trip-checklist__label">
+                  <input
+                    type="checkbox"
+                    checked={ticked[item.id] ?? item.is_food}
+                    onChange={() => toggle(item.id)}
+                  />
+                  <span className="trip-checklist__name">{item.name}</span>
+                  {/* A sibling of the (truncating) name, not nested inside
+                      it — flex-shrink: 0 keeps this visible even for a
+                      long name, the same way the quantity on the right
+                      already does. Un-ticking is only the default, not a
+                      decision made for the user — this is why, so a
+                      re-tick (a second purchase of the same thing, same
+                      day) is a choice made with the same information
+                      ProductForm's own check would otherwise surface only
+                      after opening the form. See #108. */}
+                  {duplicate && <span className="trip-checklist__badge">Ya lo tienes hoy</span>}
+                </label>
+                <span className="trip-checklist__quantity">{quantityLabel(item.quantity, null)}</span>
+              </li>
+            )
+          })}
         </ul>
       )}
 

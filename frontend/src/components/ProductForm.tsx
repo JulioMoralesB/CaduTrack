@@ -3,11 +3,12 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { BarcodeScanner } from '@/components/BarcodeScanner'
 import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
-import { LOCATION_LABELS } from '@/labels'
+import { findDuplicateToday } from '@/duplicateCheck'
+import { LOCATION_LABELS, quantityLabel } from '@/labels'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
 import { lookupBarcode, rememberBarcode } from '@/services/barcodesService'
-import { createProduct, replaceProduct } from '@/services/productsService'
+import { adjustProductQuantity, createProduct, replaceProduct } from '@/services/productsService'
 import type { Category, Location, Product, ProductPayload } from '@/services/types'
 import { extractLabel } from '@/services/visionService'
 
@@ -21,6 +22,10 @@ interface ProductFormProps {
   prefill?: { name: string; quantity: string }
   /** Passed in rather than fetched here, so opening the form costs no request. */
   categories: Category[]
+  /** The active product list, for the same-day duplicate check — see #108.
+   *  Ignored when editing: a product being edited is never a duplicate of
+   *  itself. */
+  products: Product[]
   /** Called with the server's own response, so a caller that needs the new
    *  product's id — resolving a shopping trip item into it, see #84 — has
    *  it without a second request. */
@@ -59,7 +64,7 @@ function initialState(product?: Product, prefill?: { name: string; quantity: str
 }
 
 /** Create or edit a product. The same form serves both. */
-export function ProductForm({ product, prefill, categories, onSaved, onCancel, title }: ProductFormProps) {
+export function ProductForm({ product, prefill, categories, products, onSaved, onCancel, title }: ProductFormProps) {
   const [form, setForm] = useState<FormState>(() => initialState(product, prefill))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,6 +83,12 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
   // handleSubmit, never used on its own.
   const [pendingBarcode, setPendingBarcode] = useState<{ itemCode: string; icon: string | null } | null>(null)
 
+  // Set once handleSubmit finds a same-day match, instead of saving right
+  // away — see #108. Cleared on the next name edit rather than staying
+  // sticky, since a warning about a name the user has since changed is
+  // just noise.
+  const [duplicateWarning, setDuplicateWarning] = useState<Product | null>(null)
+
   const isEdit = product !== undefined
 
   // Categories arrive asynchronously. Until they do, a select whose value has
@@ -92,8 +103,10 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
     return categories
   }, [categories, product])
 
-  const update = <K extends keyof FormState>(field: K, value: FormState[K]) =>
+  const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }))
+    if (field === 'name') setDuplicateWarning(null)
+  }
 
   /**
    * The photo is an accuracy shortcut, not a separate flow: it fills in
@@ -171,8 +184,10 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
     })()
   }
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault()
+  /** The actual network save, shared by a plain submit and "Agregar de
+   *  todas formas" — the duplicate check below only ever decides whether
+   *  this runs immediately or waits on a choice first. */
+  const performCreate = () => {
     setSaving(true)
     setError(null)
 
@@ -195,6 +210,56 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
           void rememberBarcode(pendingBarcode.itemCode, saved.name, saved.icon).catch(() => {})
         }
         onSaved(saved)
+      } catch (caught) {
+        setError(toErrorMessage(caught))
+      } finally {
+        setSaving(false)
+      }
+    })()
+  }
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+
+    // Once a choice is already on screen, a native re-submit (e.g. Enter in
+    // a text field) must not silently pick "add anyway" on its behalf —
+    // only its own explicit button does that. See #108.
+    if (duplicateWarning) return
+
+    // Only on create — editing a product's own name can never duplicate
+    // itself.
+    if (!isEdit) {
+      const duplicate = findDuplicateToday(products, form.name)
+      if (duplicate) {
+        setDuplicateWarning(duplicate)
+        return
+      }
+    }
+
+    performCreate()
+  }
+
+  const handleAddAnyway = () => {
+    setDuplicateWarning(null)
+    performCreate()
+  }
+
+  /** Bumps the existing product's quantity instead of creating a second
+   *  row for it — see #108. Still remembers a scanned barcode against the
+   *  product that actually ends up representing this code going forward,
+   *  same as a plain create would. */
+  const handleMergeIntoExisting = () => {
+    if (!duplicateWarning) return
+    setSaving(true)
+    setError(null)
+
+    void (async () => {
+      try {
+        const updated = await adjustProductQuantity(duplicateWarning.id, Number(form.quantity))
+        if (pendingBarcode) {
+          void rememberBarcode(pendingBarcode.itemCode, updated.name, updated.icon).catch(() => {})
+        }
+        onSaved(updated)
       } catch (caught) {
         setError(toErrorMessage(caught))
       } finally {
@@ -394,25 +459,49 @@ export function ProductForm({ product, prefill, categories, onSaved, onCancel, t
           </p>
         )}
 
-        <div className="form__actions">
-          <button type="button" onClick={onCancel} disabled={saving}>
-            Cancelar
-          </button>
-          <button type="submit" className="button--primary" disabled={saving}>
-            {saving ? (
-              <>
-                {/* Stays up across the whole retry sequence, because `saving`
-                    is only cleared once withRetry settles. A dropped
-                    connection is exactly when a still-disabled button with no
-                    motion reads as a hang. */}
-                <span className="spinner" aria-hidden="true" />
-                Guardando…
-              </>
-            ) : (
-              'Guardar'
-            )}
-          </button>
-        </div>
+        {/* Replaces the normal actions rather than sitting above them —
+            Guardar going through again would just re-run into the same
+            duplicate, so the three explicit choices are the only way
+            forward from here. See #108. */}
+        {duplicateWarning ? (
+          <div className="form__duplicate-warning" role="alert">
+            <p>
+              Ya agregaste "{duplicateWarning.name}" hoy ({quantityLabel(duplicateWarning.quantity, duplicateWarning.unit)}
+              ). ¿Qué quieres hacer?
+            </p>
+            <div className="form__actions">
+              <button type="button" onClick={onCancel} disabled={saving}>
+                Omitir
+              </button>
+              <button type="button" onClick={handleMergeIntoExisting} disabled={saving}>
+                Sumar a la cantidad existente
+              </button>
+              <button type="button" className="button--primary" onClick={handleAddAnyway} disabled={saving}>
+                Agregar de todas formas
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="form__actions">
+            <button type="button" onClick={onCancel} disabled={saving}>
+              Cancelar
+            </button>
+            <button type="submit" className="button--primary" disabled={saving}>
+              {saving ? (
+                <>
+                  {/* Stays up across the whole retry sequence, because `saving`
+                      is only cleared once withRetry settles. A dropped
+                      connection is exactly when a still-disabled button with no
+                      motion reads as a hang. */}
+                  <span className="spinner" aria-hidden="true" />
+                  Guardando…
+                </>
+              ) : (
+                'Guardar'
+              )}
+            </button>
+          </div>
+        )}
       </form>
       {barcodeScanning && (
         <BarcodeScanner onDetected={handleBarcodeDetected} onCancel={() => setBarcodeScanning(false)} />
