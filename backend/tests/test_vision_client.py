@@ -8,6 +8,7 @@ here would save it as a fact about a real product, which is exactly what
 """
 
 import json
+import logging
 
 import httpx
 import pytest
@@ -136,6 +137,24 @@ def test_returns_none_on_an_http_error_status(mocker):
     )
 
     assert extract_label(_IMAGE) is None
+
+
+def test_an_http_error_status_logs_the_status_and_ollamas_own_explanation(mocker, caplog):
+    """Previously logged only the exception's class name — "HTTPStatusError"
+    — with the actual status and Ollama's own error body thrown away, which
+    is exactly the detail needed to tell "Ollama rejected this outright"
+    apart from "Ollama crashed processing it" without shelling into the
+    server to read its own logs. See #83's live bug report."""
+    mocker.patch(
+        "app.vision_client.httpx.post",
+        return_value=httpx.Response(status_code=500, text="model crashed decoding image", request=_REQUEST),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.vision_client"):
+        extract_label(_IMAGE)
+
+    assert "500" in caplog.records[0].getMessage()
+    assert "model crashed decoding image" in caplog.records[0].getMessage()
 
 
 def test_returns_none_when_the_response_field_is_not_json(mocker):
