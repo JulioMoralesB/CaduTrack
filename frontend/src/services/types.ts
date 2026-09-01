@@ -120,3 +120,37 @@ export interface LabelExtraction {
   quantity: string | null
   unit: string | null
 }
+
+/** One line read from a receipt photo — see #84 and POST /trips/receipt. */
+export interface ShoppingTripItem {
+  id: number
+  name: string
+  quantity: string
+  /** The model's own guess at whether this line is worth tracking — drives
+   *  the checklist's initial tick state, not a final answer. */
+  is_food: boolean
+  /** Null while still awaiting a decision. Set once the item was either
+   *  turned into a product or explicitly dropped — see product_id. */
+  resolved_at: string | null
+  /** Set only when resolved_at is set and the item became a product;
+   *  resolved with this still null means it was dropped instead. */
+  product_id: number | null
+}
+
+/** A shopping trip's checklist — see #84. Persists across reloads: the
+ *  photo is analyzed once, then the trip stays visible until every item is
+ *  either added as a product or dropped. */
+export interface ShoppingTrip {
+  id: number
+  created_at: string
+  /** What the receipt's own printed total said, e.g. from "ARTICULOS
+   *  COMPRADOS: 19" — null when the receipt didn't show one or the model
+   *  couldn't read it, which is different from a mismatch. */
+  stated_item_count: number | null
+  items: ShoppingTripItem[]
+  /** The sum of every line's quantity — the free checksum #84 asks for. */
+  counted_quantity: string
+  /** Null when there is nothing to reconcile against (stated_item_count is
+   *  null); otherwise whether counted_quantity actually matches it. */
+  reconciled: boolean | null
+}

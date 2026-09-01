@@ -21,8 +21,16 @@ vi.mock('@/services/categoriesService', () => ({
   listCategories: vi.fn(),
 }))
 
+vi.mock('@/services/tripsService', () => ({
+  getCurrentTrip: vi.fn(),
+  uploadReceipt: vi.fn(),
+  dropTripItem: vi.fn(),
+  resolveTripItem: vi.fn(),
+}))
+
 const products = await import('@/services/productsService')
 const categories = await import('@/services/categoriesService')
+const trips = await import('@/services/tripsService')
 
 const mockedList = vi.mocked(products.listProducts)
 const mockedCreate = vi.mocked(products.createProduct)
@@ -32,6 +40,8 @@ const mockedConsume = vi.mocked(products.consumeProduct)
 const mockedHistory = vi.mocked(products.listConsumedProducts)
 const mockedRestore = vi.mocked(products.restoreProduct)
 const mockedCategories = vi.mocked(categories.listCategories)
+const mockedCurrentTrip = vi.mocked(trips.getCurrentTrip)
+const mockedUploadReceipt = vi.mocked(trips.uploadReceipt)
 
 function product(overrides: Partial<Product> = {}): Product {
   return {
@@ -70,6 +80,7 @@ beforeEach(() => {
   mockedCategories.mockResolvedValue([
     { id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' },
   ])
+  mockedCurrentTrip.mockResolvedValue(null)
 })
 
 describe('ProductList', () => {
@@ -332,6 +343,97 @@ describe('viewing history', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Historial' }))
 
     expect(await screen.findByText('Todavía no has marcado nada como consumido.')).toBeInTheDocument()
+  })
+})
+
+describe('scanning a receipt', () => {
+  function selectReceipt(container: HTMLElement) {
+    const input = container.querySelector('input[type="file"]')
+    if (!input) throw new Error('receipt file input not found')
+    const file = new File(['fake'], 'receipt.jpg', { type: 'image/jpeg' })
+    fireEvent.change(input, { target: { files: [file] } })
+  }
+
+  it('uploads the photo and opens the checklist on success', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedUploadReceipt.mockResolvedValue({
+      id: 1,
+      created_at: '2026-09-01T00:00:00Z',
+      stated_item_count: null,
+      items: [
+        { id: 1, name: 'Nopal limpio', quantity: '1.00', is_food: true, resolved_at: null, product_id: null },
+      ],
+      counted_quantity: '1.00',
+      reconciled: null,
+    })
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Recibo' })
+    selectReceipt(container)
+
+    await waitFor(() => expect(mockedUploadReceipt).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('Nopal limpio')).toBeInTheDocument()
+  })
+
+  it('shows a readable error when the upload fails', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedUploadReceipt.mockRejectedValue(new Error('boom'))
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Recibo' })
+    selectReceipt(container)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+  })
+
+  it('shows a banner for a trip left over from a previous visit', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedCurrentTrip.mockResolvedValue({
+      id: 4,
+      created_at: '2026-08-31T00:00:00Z',
+      stated_item_count: null,
+      items: [
+        { id: 1, name: 'Nopal limpio', quantity: '1.00', is_food: true, resolved_at: null, product_id: null },
+        { id: 2, name: 'Plátano', quantity: '2.00', is_food: true, resolved_at: null, product_id: null },
+      ],
+      counted_quantity: '3.00',
+      reconciled: null,
+    })
+
+    render(<ProductList />)
+
+    const banner = await screen.findByRole('button', { name: /recibo pendiente/i })
+    expect(banner).toHaveTextContent('2 productos')
+
+    fireEvent.click(banner)
+
+    expect(await screen.findByText('Plátano')).toBeInTheDocument()
+  })
+
+  it('does not show a banner once every item in the leftover trip is already resolved', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedCurrentTrip.mockResolvedValue({
+      id: 4,
+      created_at: '2026-08-31T00:00:00Z',
+      stated_item_count: null,
+      items: [
+        {
+          id: 1,
+          name: 'Nopal limpio',
+          quantity: '1.00',
+          is_food: true,
+          resolved_at: '2026-08-31T00:05:00Z',
+          product_id: 9,
+        },
+      ],
+      counted_quantity: '1.00',
+      reconciled: null,
+    })
+
+    render(<ProductList />)
+    await screen.findByRole('button', { name: 'Recibo' })
+
+    expect(screen.queryByRole('button', { name: /recibo pendiente/i })).not.toBeInTheDocument()
   })
 })
 

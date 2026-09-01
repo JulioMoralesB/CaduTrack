@@ -12,10 +12,22 @@ import { extractLabel } from '@/services/visionService'
 interface ProductFormProps {
   /** Omit to create; pass a product to edit it. */
   product?: Product
+  /** Seeds name and quantity when creating from a shopping trip item's own
+   *  reading of the receipt — see #84. Ignored when editing, and only ever
+   *  a starting point: both fields stay fully editable, same as a photo
+   *  scan's own prefill. */
+  prefill?: { name: string; quantity: string }
   /** Passed in rather than fetched here, so opening the form costs no request. */
   categories: Category[]
-  onSaved: () => void
+  /** Called with the server's own response, so a caller that needs the new
+   *  product's id — resolving a shopping trip item into it, see #84 — has
+   *  it without a second request. */
+  onSaved: (product: Product) => void
   onCancel: () => void
+  /** Overrides the default "Agregar producto"/"Editar producto" title —
+   *  used when this form is one step of a larger flow (adding items from a
+   *  shopping trip, see #84) so the user can see progress through it. */
+  title?: string
 }
 
 /** Common units, offered as suggestions without restricting what can be typed. */
@@ -31,12 +43,12 @@ interface FormState {
   notes: string
 }
 
-function initialState(product?: Product): FormState {
+function initialState(product?: Product, prefill?: { name: string; quantity: string }): FormState {
   return {
-    name: product?.name ?? '',
+    name: product?.name ?? prefill?.name ?? '',
     category_id: product?.category_id?.toString() ?? '',
     // Strip the trailing zeros the API sends so the field is not "2.00".
-    quantity: product ? product.quantity.replace(/\.?0+$/, '') : '1',
+    quantity: product ? product.quantity.replace(/\.?0+$/, '') : (prefill?.quantity ?? '1'),
     unit: product?.unit ?? '',
     expires_at: product?.expires_at ?? '',
     location: product?.location ?? 'fridge',
@@ -45,8 +57,8 @@ function initialState(product?: Product): FormState {
 }
 
 /** Create or edit a product. The same form serves both. */
-export function ProductForm({ product, categories, onSaved, onCancel }: ProductFormProps) {
-  const [form, setForm] = useState<FormState>(() => initialState(product))
+export function ProductForm({ product, prefill, categories, onSaved, onCancel, title }: ProductFormProps) {
+  const [form, setForm] = useState<FormState>(() => initialState(product, prefill))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -130,12 +142,8 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
 
     void (async () => {
       try {
-        if (product) {
-          await replaceProduct(product.id, payload)
-        } else {
-          await createProduct(payload)
-        }
-        onSaved()
+        const saved = product ? await replaceProduct(product.id, payload) : await createProduct(payload)
+        onSaved(saved)
       } catch (caught) {
         setError(toErrorMessage(caught))
       } finally {
@@ -145,7 +153,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   }
 
   return (
-    <Modal title={isEdit ? 'Editar producto' : 'Agregar producto'} onClose={onCancel}>
+    <Modal title={title ?? (isEdit ? 'Editar producto' : 'Agregar producto')} onClose={onCancel}>
       <form className="form" onSubmit={handleSubmit}>
         {/* The photo is the entry point, not an afterthought — see #83 — so
             it comes first, above manual entry rather than buried below it.
