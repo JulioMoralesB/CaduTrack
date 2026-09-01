@@ -1,7 +1,7 @@
 import { AxiosError, AxiosHeaders } from 'axios'
 import { describe, expect, it } from 'vitest'
 
-import { toErrorMessage } from '@/services/api'
+import { apiUrl, isUnreachable, toErrorMessage } from '@/services/api'
 
 function axiosErrorWith(data: unknown, status = 422): AxiosError {
   const error = new AxiosError('Request failed')
@@ -49,5 +49,32 @@ describe('toErrorMessage', () => {
 
   it('falls back for anything that is not an Axios error', () => {
     expect(toErrorMessage(new Error('boom'))).toBe('Ocurrió un error inesperado.')
+  })
+})
+
+describe('isUnreachable', () => {
+  it('is true for a network error', () => {
+    expect(isUnreachable(new AxiosError('Network Error', 'ERR_NETWORK'))).toBe(true)
+  })
+
+  it('is true for a bodyless 500, the same bucket a blocked Cloudflare Access redirect falls into', () => {
+    expect(isUnreachable(axiosErrorWith('', 500))).toBe(true)
+  })
+
+  it('is false for a real error the server explained', () => {
+    expect(isUnreachable(axiosErrorWith({ detail: 'Category 9999 does not exist' }))).toBe(false)
+  })
+
+  it('is false for anything that is not an Axios error', () => {
+    expect(isUnreachable(new Error('boom'))).toBe(false)
+  })
+})
+
+describe('apiUrl', () => {
+  it('resolves a relative API_BASE_URL against the current origin', () => {
+    // The default API_BASE_URL in this test environment is the relative
+    // "/api" path — see api.ts — so this also covers the production shape
+    // (proxied by nginx/Cloudflare) without needing to mock import.meta.env.
+    expect(apiUrl('/products')).toBe(`${window.location.origin}/api/products`)
   })
 })
