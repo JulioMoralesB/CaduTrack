@@ -382,6 +382,11 @@
   }
 }
 
+.form__scan {
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Filters */
 
 .filters {
