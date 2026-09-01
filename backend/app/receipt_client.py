@@ -25,11 +25,20 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Same reasoning as vision_client.py's own budget: a downscaled real-photo
-# request measured in the tens of seconds, not the sub-2s a tiny synthetic
-# image suggested early on. A receipt has more lines to read than a single
-# label, so it gets the same generous number rather than a tighter one.
-TIMEOUT_SECONDS = 45.0
+# A receipt's output scales with line count in a way a single label's never
+# does: extracting one {name, date, weight} costs a roughly fixed number of
+# output tokens regardless of the photo, but a receipt generates one
+# {name, quantity, is_food} per line. Measured directly against the real
+# server, cold: a 20-item receipt took 24.4s total, a 36-item receipt took
+# 33.2s — generation alone ran 9.1s and 18.6s respectively, essentially
+# linear at ~49 tokens/s. 45s — sized for #83's single-item case — is
+# exactly what a real receipt hit in production (nginx logged
+# request_time: 45.124 against this timeout, to the millisecond). 120s
+# leaves real headroom for a large trip (60-80 lines) plus a cold load,
+# without leaving a genuinely unreachable Ollama able to stall for long.
+# nginx's own proxy_read_timeout for /api/ has to stay above this — see
+# nginx.conf — or it becomes the new, blunter cutoff instead.
+TIMEOUT_SECONDS = 120.0
 
 _RESPONSE_SCHEMA = {
     "type": "object",
