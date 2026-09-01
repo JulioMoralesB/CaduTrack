@@ -31,6 +31,27 @@ def test_database_url_omits_empty_password():
     assert "postgresql+psycopg://julio@" in settings.database_url
 
 
+def test_database_url_env_var_overrides_the_parts():
+    """See #56: compose.yaml sets this to point at the bundled Postgres it
+    also brings up, and it is also how someone points at a different
+    instance entirely — a shared one, say — without a code change."""
+    settings = Settings(DATABASE_URL="postgresql+psycopg://someone:else@elsewhere:5432/db", db_user="julio")
+    assert settings.database_url == "postgresql+psycopg://someone:else@elsewhere:5432/db"
+
+
+def test_database_url_env_var_gets_the_psycopg_driver_even_when_bare():
+    """A bare "postgresql://" is what every DATABASE_URL convention outside
+    this repo actually uses — SQLAlchemy would otherwise reach for psycopg2,
+    which this app does not install."""
+    settings = Settings(DATABASE_URL="postgresql://someone:else@elsewhere:5432/db")
+    assert settings.database_url == "postgresql+psycopg://someone:else@elsewhere:5432/db"
+
+
+def test_database_url_env_var_already_naming_the_driver_is_left_alone():
+    settings = Settings(DATABASE_URL="postgresql+psycopg://someone:else@elsewhere:5432/db")
+    assert settings.database_url == "postgresql+psycopg://someone:else@elsewhere:5432/db"
+
+
 def test_cors_origins_are_split_and_trimmed():
     settings = Settings(cors_origins="http://localhost:5173, https://cadutrack.example.com ,")
     assert settings.cors_origin_list == ["http://localhost:5173", "https://cadutrack.example.com"]

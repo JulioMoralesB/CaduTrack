@@ -1,13 +1,13 @@
-"""Create the service's database on first start.
+"""Wait for the database to be reachable before the rest of the entrypoint runs.
 
-Alembic creates the schema; nothing creates the database that holds it. Without
-this the container crash-loops on a fresh server until someone runs
-CREATE DATABASE by hand.
-
-The maintenance database is only touched when it is actually needed: if the
-configured database already exists — the case on every start after the first —
-this connects to it, finds it healthy and returns. That keeps a least-privilege
-role viable, since the common path needs no rights beyond the app's own.
+Used to also create the configured database on a missing-database start.
+That stopped being this process's job with #56: the app's own credentials
+deliberately cannot CREATE DATABASE, so the database now has to already
+exist by the time this runs — created by the bundled compose Postgres's own
+first-boot init, or a manual step against a shared instance. This module's
+remaining job is waiting out a cold start and failing loudly, with an
+actionable message, if the database still is not there once the server
+itself answers.
 """
 
 import logging
@@ -17,7 +17,7 @@ import time
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import OperationalError
 
 from app.config import settings
 from app.logging_config import setup_logging
@@ -77,6 +77,20 @@ class DatabaseAuthenticationError(RuntimeError):
 
     def __init__(self, cause: OperationalError) -> None:
         super().__init__(f"Database rejected our credentials, check DB_USER/DB_PASSWORD: {cause}")
+
+
+class DatabaseMissingError(RuntimeError):
+    """The server answered, but the configured database itself is not there.
+
+    Raised instead of creating it — see #56: the app's own credentials
+    deliberately cannot CREATE DATABASE, so a missing database now always
+    means a deployment step did not run, not something this process can
+    still fix by itself.
+    """
+
+    def __init__(self, db_name: str) -> None:
+        super().__init__(f"Database {db_name!r} does not exist")
+        self.db_name = db_name
 
 
 # psycopg does not attach a SQLSTATE to failures raised during connection setup
@@ -163,45 +177,13 @@ def _database_exists_once_reachable() -> bool:
             time.sleep(delay)
 
 
-def _maintenance_url() -> str:
-    """The same connection, pointed at the default `postgres` database."""
-    return settings.database_url.rsplit("/", 1)[0] + "/postgres"
-
-
-def ensure_database_exists() -> None:
-    """Create the configured database if it is missing."""
+def verify_database_exists() -> None:
+    """Confirm the configured database is reachable, once the server itself
+    is — see #56 for why this only verifies rather than creating."""
     if _database_exists_once_reachable():
         logger.info("Database %r is present", settings.db_name)
         return
-
-    logger.info("Database %r not found, creating it", settings.db_name)
-    engine = create_engine(
-        _maintenance_url(),
-        # CREATE DATABASE cannot run inside a transaction.
-        isolation_level="AUTOCOMMIT",
-        connect_args={"connect_timeout": settings.db_connect_timeout},
-    )
-    try:
-        with engine.connect() as connection:
-            connection.execute(text(f'CREATE DATABASE "{settings.db_name}"'))
-        logger.info("Created database %r", settings.db_name)
-    except ProgrammingError as exc:
-        message = str(exc)
-        if "already exists" in message or "42P04" in message:
-            # Another container won the race. Nothing to do.
-            logger.info("Database %r was created concurrently", settings.db_name)
-            return
-        if "permission denied" in message or "42501" in message:
-            logger.error(
-                "User %r may not create databases. Create it manually and restart:\n"
-                '    CREATE DATABASE "%s";',
-                settings.db_user,
-                settings.db_name,
-            )
-            raise SystemExit(1) from exc
-        raise
-    finally:
-        engine.dispose()
+    raise DatabaseMissingError(settings.db_name)
 
 
 def main() -> None:
@@ -212,10 +194,11 @@ def main() -> None:
         level=settings.log_level,
     )
     try:
-        ensure_database_exists()
+        verify_database_exists()
     except DatabaseUnreachableError as exc:
-        # The one ERROR this module may emit: the wait was exhausted and the
-        # service genuinely cannot start. Both numbers are measured.
+        # The one ERROR this module may emit for a down server: the wait was
+        # exhausted and the service genuinely cannot start. Both numbers are
+        # measured.
         logger.error(
             "Database server unreachable after %d attempts over %.0fs: %s",
             exc.attempts,
@@ -228,11 +211,12 @@ def main() -> None:
         # reachable the whole time, so this must not be read as it being down.
         logger.error("%s", exc)
         sys.exit(1)
-    except OperationalError as exc:
-        # Only reachable from the CREATE DATABASE path, which runs after the
-        # server has already answered once. Worded so it cannot be read as the
-        # server being down, because it is not.
-        logger.error("Database bootstrap could not connect: %s", exc.__class__.__name__)
+    except DatabaseMissingError as exc:
+        logger.error(
+            "Database %r does not exist and this service cannot create it — "
+            "see the deployment docs for who creates it and when.",
+            exc.db_name,
+        )
         sys.exit(1)
 
 

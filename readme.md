@@ -31,9 +31,8 @@ A food expiry tracker app to register purchased food items, their expiration dat
 
 ## Where this runs
 
-CaduTrack is deployed on a home server whose architecture — the shared PostgreSQL
-instance, the Docker network, how logs are collected, how services are exposed —
-is documented in one place:
+CaduTrack is deployed on a home server whose architecture — the Docker network,
+how logs are collected, how services are exposed — is documented in one place:
 
 **[server-documentation.apollox10.com](https://server-documentation.apollox10.com)**
 
@@ -50,7 +49,8 @@ weeks earlier, because the repo still described it.
 ```
 cadutrack/
 ├── frontend/       # React + Vite + TypeScript PWA
-└── backend/        # FastAPI + PostgreSQL + APScheduler
+├── backend/        # FastAPI + PostgreSQL + APScheduler
+└── db/init/        # First-boot scripts for the bundled cadutrack-db container
 ```
 
 ---
@@ -78,9 +78,10 @@ cadutrack/
 | created_at | timestamp                         |
 | updated_at | timestamp                         |
 
-> CaduTrack owns the database `cadutrack` and the schema `cadutrack` inside the
-> shared `apollo-server-db` PostgreSQL instance. It does not run its own database
-> server. Alembic's version table lives in `public`.
+> CaduTrack owns the database `cadutrack` and the schema `cadutrack` inside it,
+> on its own bundled PostgreSQL — `compose.yaml` brings up `cadutrack-db`
+> alongside the app, and nothing else reads or writes it. Alembic's version
+> table lives in `public`.
 
 ### Expiry Status Logic
 
@@ -134,7 +135,9 @@ Steps for each issue:
 
 ## Getting Started
 
-> Prerequisites: Python 3.11+, Node.js 20+, PostgreSQL 15+, Docker (optional)
+> Prerequisites: Python 3.11+, Node.js 20+, Docker (for `docker compose up`,
+> which brings its own PostgreSQL) — or PostgreSQL 15+ of your own for the
+> backend's no-Docker path
 
 ### Backend
 
@@ -222,19 +225,22 @@ There are two `.env.example` files, and they are not interchangeable:
 | [`.env.example`](.env.example) (repo root) | **Deploying** with `compose.yaml` — Dockge or `docker compose up -d` |
 | [`backend/.env.example`](backend/.env.example) | Running the API **directly on your machine**, without Docker |
 
-The root file omits `DB_HOST` on purpose: `compose.yaml` points the container at
-`apollo-server-db` over the shared network. The backend file sets it to
-`localhost`, which is correct on your machine and wrong inside a container — so
-do not copy that one to the root.
+The root file's database section looks different from the backend one on
+purpose — see #56. `compose.yaml` brings up its own PostgreSQL (`cadutrack-db`)
+and points the API at it directly; `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_NAME` do
+not need setting there at all. The backend file's `DB_HOST=localhost` is
+correct on your own machine and wrong inside a container — so do not copy
+that one to the root.
 
 See [`backend/.env.example`](backend/.env.example) for the full documented list
 of settings; every one of them is valid in either file.
 
 | Variable              | Description                                        |
 |-----------------------|----------------------------------------------------|
-| `DB_HOST` / `DB_PORT` | Shared `apollo-server-db` host and port            |
-| `DB_NAME`             | Database owned by this service (`cadutrack`)       |
-| `DB_USER` / `DB_PASSWORD` | PostgreSQL credentials                         |
+| `DB_PASSWORD`         | The app's own database role, created on first start |
+| `DB_ADMIN_PASSWORD`   | Root file only — bootstraps `cadutrack-db`'s first start, never reaches the API container |
+| `DATABASE_URL`        | Overrides everything above to point at a different PostgreSQL entirely |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_NAME` | Backend file only — the no-Docker path's own connection parts |
 | `DB_SCHEMA`           | Schema owned by this service (`cadutrack`)         |
 | `API_KEY`             | Protects mutating endpoints via `X-API-Key`        |
 | `TELEGRAM_BOT_TOKEN`  | Token from @BotFather                              |

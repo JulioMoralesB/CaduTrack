@@ -3,18 +3,17 @@
 import logging
 
 import pytest
-from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 from app.config import settings
 from app.db.bootstrap import (
     DatabaseAuthenticationError,
+    DatabaseMissingError,
     DatabaseUnreachableError,
-    _maintenance_url,
-    ensure_database_exists,
+    verify_database_exists,
 )
 
-THROWAWAY = "cadutrack_bootstrap_pytest"
+THROWAWAY = "cadutrack_bootstrap_pytest_does_not_exist"
 
 
 class FakeClock:
@@ -97,55 +96,23 @@ def test_a_generic_connection_failure_is_classified_as_neither(monkeypatch):
     assert bootstrap._is_authentication_failure(exc) is False
 
 
-def test_maintenance_url_keeps_the_credentials_and_swaps_the_database():
-    url = _maintenance_url()
-    assert url.endswith("/postgres")
-    assert url.rsplit("/", 1)[0] == settings.database_url.rsplit("/", 1)[0]
-
-
-@pytest.fixture
-def maintenance_engine():
-    engine = create_engine(_maintenance_url(), isolation_level="AUTOCOMMIT")
-    try:
-        with engine.connect() as connection:
-            connection.execute(text(f'DROP DATABASE IF EXISTS "{THROWAWAY}"'))
-        yield engine
-        with engine.connect() as connection:
-            connection.execute(text(f'DROP DATABASE IF EXISTS "{THROWAWAY}"'))
-    finally:
-        engine.dispose()
-
-
-def _exists(engine, name: str) -> bool:
-    with engine.connect() as connection:
-        return (
-            connection.execute(
-                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": name}
-            ).scalar()
-            is not None
-        )
+@pytest.mark.integration
+def test_verify_is_a_no_op_when_the_database_already_exists():
+    """The real cadutrack_test database this whole suite runs against —
+    every start after the first takes this path, and it must not raise."""
+    verify_database_exists()
 
 
 @pytest.mark.integration
-def test_creates_the_database_when_missing(maintenance_engine, monkeypatch):
+def test_verify_raises_when_the_database_does_not_exist(monkeypatch):
+    """See #56: this process cannot create it any more, so a missing
+    database is reported instead of silently fixed."""
     monkeypatch.setattr(settings, "db_name", THROWAWAY)
-    assert not _exists(maintenance_engine, THROWAWAY)
 
-    ensure_database_exists()
+    with pytest.raises(DatabaseMissingError) as excinfo:
+        verify_database_exists()
 
-    assert _exists(maintenance_engine, THROWAWAY)
-
-
-@pytest.mark.integration
-def test_is_a_no_op_when_the_database_already_exists(maintenance_engine, monkeypatch):
-    """Every start after the first takes this path."""
-    monkeypatch.setattr(settings, "db_name", THROWAWAY)
-    ensure_database_exists()
-
-    # Must not raise, and must leave the database alone.
-    ensure_database_exists()
-
-    assert _exists(maintenance_engine, THROWAWAY)
+    assert excinfo.value.db_name == THROWAWAY
 
 
 def test_a_transient_outage_produces_warnings_and_no_error(monkeypatch, caplog):
@@ -324,3 +291,25 @@ def test_main_reports_bad_credentials_instead_of_a_server_that_never_came_up(mon
     assert excinfo.value.code == 1
     assert [record.levelname for record in caplog.records] == ["ERROR"]
     assert "DB_USER/DB_PASSWORD" in caplog.records[0].getMessage()
+
+
+def test_main_reports_a_missing_database_without_trying_to_create_it(monkeypatch, caplog):
+    """See #56: the old behavior created the database here; the new one
+    only reports that it is missing, on the very first attempt."""
+    import app.db.bootstrap as bootstrap
+
+    def missing_database() -> bool:
+        return False
+
+    monkeypatch.setattr(bootstrap, "_database_exists", missing_database)
+    monkeypatch.setattr(bootstrap, "time", FakeClock())
+    monkeypatch.setattr(bootstrap, "setup_logging", lambda **kwargs: None)
+    monkeypatch.setattr(settings, "db_name", THROWAWAY)
+
+    with caplog.at_level(logging.DEBUG, logger="app.db.bootstrap"):
+        with pytest.raises(SystemExit) as excinfo:
+            bootstrap.main()
+
+    assert excinfo.value.code == 1
+    assert [record.levelname for record in caplog.records] == ["ERROR"]
+    assert THROWAWAY in caplog.records[0].getMessage()
