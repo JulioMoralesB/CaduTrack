@@ -95,6 +95,12 @@ class Product(Base):
         server_default=func.now(),
         server_onupdate=FetchedValue(),
     )
+    # NULL means active (in the fridge); set means consumed, moved to history.
+    # Indexed because every list view now filters on it, the same reason
+    # expires_at is indexed above.
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     category: Mapped[Category | None] = relationship(back_populates="products")
 

@@ -4,7 +4,7 @@ import { IconPicker } from '@/components/IconPicker'
 import { LOCATION_LABELS, expiryPhrase, quantityLabel } from '@/labels'
 import { canStepDown } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
-import { adjustProductQuantity, setProductIcon } from '@/services/productsService'
+import { adjustProductQuantity, consumeProduct, setProductIcon } from '@/services/productsService'
 import type { Product } from '@/services/types'
 
 interface ProductCardProps {
@@ -14,16 +14,22 @@ interface ProductCardProps {
   /** Called with the server's own response after a successful quantity tap or
    *  icon change, so the list can update that one row without a full reload. */
   onProductChanged: (updated: Product) => void
+  /** Called with the id after a successful consume — the row leaves the
+   *  active list entirely rather than being updated in place. */
+  onConsumed: (id: number) => void
 }
 
 /** One product row: what it is, how much, where, and how urgent. */
-export function ProductCard({ product, onEdit, onDelete, onProductChanged }: ProductCardProps) {
+export function ProductCard({ product, onEdit, onDelete, onProductChanged, onConsumed }: ProductCardProps) {
   const [adjustingQuantity, setAdjustingQuantity] = useState(false)
   const [quantityError, setQuantityError] = useState<string | null>(null)
 
   const [editingIcon, setEditingIcon] = useState(false)
   const [savingIcon, setSavingIcon] = useState(false)
   const [iconError, setIconError] = useState<string | null>(null)
+
+  const [consuming, setConsuming] = useState(false)
+  const [consumeError, setConsumeError] = useState<string | null>(null)
 
   const adjustQuantity = (delta: 1 | -1) => {
     setAdjustingQuantity(true)
@@ -57,6 +63,21 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged }: Pro
         setIconError(toErrorMessage(caught))
       } finally {
         setSavingIcon(false)
+      }
+    })()
+  }
+
+  const handleConsume = () => {
+    setConsuming(true)
+    setConsumeError(null)
+    void (async () => {
+      try {
+        await consumeProduct(product.id)
+        onConsumed(product.id)
+      } catch (caught) {
+        setConsumeError(toErrorMessage(caught))
+      } finally {
+        setConsuming(false)
       }
     })()
   }
@@ -132,6 +153,11 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged }: Pro
             {iconError}
           </p>
         )}
+        {consumeError && (
+          <p className="product-card__quantity-error" role="alert">
+            {consumeError}
+          </p>
+        )}
         {product.notes && <p className="product-card__notes">{product.notes}</p>}
       </div>
 
@@ -140,6 +166,15 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged }: Pro
           <time dateTime={product.expires_at}>{expiryPhrase(product.days_until_expiry)}</time>
         </p>
         <div className="product-card__actions">
+          <button
+            type="button"
+            className="button--icon"
+            onClick={handleConsume}
+            disabled={consuming}
+            aria-label={`Marcar ${product.name} como consumido`}
+          >
+            {consuming ? 'Marcando…' : 'Consumido'}
+          </button>
           <button
             type="button"
             className="button--icon"

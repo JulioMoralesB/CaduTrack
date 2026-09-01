@@ -60,6 +60,34 @@ export async function deleteProduct(id: number): Promise<void> {
 }
 
 /**
+ * Consumed products, most recently consumed first. See #31.
+ */
+export async function listConsumedProducts(): Promise<Product[]> {
+  const { data } = await api.get<Product[]>('/products/history')
+  return data
+}
+
+/**
+ * Mark a product as consumed, moving it from the active list to history.
+ *
+ * Not retried, on the same reasoning as deleteProduct above: a repeat that
+ * follows a consume which actually succeeded gets a 409 (the backend rejects
+ * consuming an already-consumed product), and the user would be shown an
+ * error for an action that worked.
+ */
+export async function consumeProduct(id: number): Promise<Product> {
+  const { data } = await api.post<Product>(`/products/${id}/consume`)
+  return data
+}
+
+/** Undo a consumed mark, returning a product to the active list. Not
+ *  retried, for the same reason as consumeProduct. */
+export async function restoreProduct(id: number): Promise<Product> {
+  const { data } = await api.post<Product>(`/products/${id}/restore`)
+  return data
+}
+
+/**
  * Adjust a product's quantity by a relative amount — never an absolute value,
  * so two taps racing on a slow connection compose correctly regardless of
  * arrival order. See the backend's ProductQuantityDelta and #82.

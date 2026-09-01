@@ -500,6 +500,48 @@
   font-weight: 600;
 }
 
+/* History */
+
+.product-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.product-history__row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.product-history__row:last-child {
+  border-bottom: none;
+}
+
+.product-history__icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.product-history__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.product-history__name {
+  font-weight: 600;
+}
+
+.product-history__meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 /* Theme picker */
 
 .theme {
