@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { toErrorMessage } from '@/services/api'
+import { isUnreachable, toErrorMessage } from '@/services/api'
 import { listProducts } from '@/services/productsService'
 import type { Product, ProductFilters } from '@/services/types'
 
@@ -8,6 +8,13 @@ interface UseProductsResult {
   products: Product[]
   loading: boolean
   error: string | null
+  /**
+   * True when `error` looks like the backend could not be reached at all —
+   * see api.ts's isUnreachable. Lets the UI offer a Cloudflare Access
+   * re-authentication link only where it could plausibly help, rather than
+   * for e.g. a validation error, where it would be noise.
+   */
+  unreachable: boolean
   /** Set when the list came from the offline cache rather than the network. */
   cachedAt: Date | null
   reload: () => void
@@ -45,6 +52,7 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [unreachable, setUnreachable] = useState(false)
   const [cachedAt, setCachedAt] = useState<Date | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
 
@@ -62,9 +70,13 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
           setProducts(result.products)
           setCachedAt(result.cachedAt)
           setError(null)
+          setUnreachable(false)
         }
       } catch (caught) {
-        if (active) setError(toErrorMessage(caught))
+        if (active) {
+          setError(toErrorMessage(caught))
+          setUnreachable(isUnreachable(caught))
+        }
       } finally {
         if (active) setLoading(false)
       }
@@ -81,6 +93,7 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
   const reload = useCallback(() => {
     setLoading(true)
     setError(null)
+    setUnreachable(false)
     setReloadNonce((nonce) => nonce + 1)
   }, [])
 
@@ -114,5 +127,5 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     setProducts((current) => current.filter((product) => product.id !== id))
   }, [])
 
-  return { products, loading, error, cachedAt, reload, replaceProduct, removeProduct }
+  return { products, loading, error, unreachable, cachedAt, reload, replaceProduct, removeProduct }
 }

@@ -17,7 +17,7 @@ import {
 } from '@/filters'
 import { useCategories } from '@/hooks/useCategories'
 import { useProducts } from '@/hooks/useProducts'
-import { toErrorMessage } from '@/services/api'
+import { apiUrl, toErrorMessage } from '@/services/api'
 import { deleteProduct } from '@/services/productsService'
 import type { Product } from '@/services/types'
 
@@ -32,7 +32,7 @@ type Dialog =
 
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
-  const { products, loading, error, cachedAt, reload, replaceProduct, removeProduct } = useProducts()
+  const { products, loading, error, unreachable, cachedAt, reload, replaceProduct, removeProduct } = useProducts()
   const categories = useCategories()
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' })
   const [deleting, setDeleting] = useState(false)
@@ -96,6 +96,22 @@ export function ProductList() {
       {!loading && error && (
         <div className="state state--error" role="alert">
           <p>{error}</p>
+          {/* This bucket also covers a Cloudflare Access session expiring —
+              see api.ts's isUnreachable — which otherwise fails the exact
+              same way forever: a fetch can never complete Access's
+              interactive login on its own, only a real top-level navigation
+              to a protected URL can. Harmless when the real cause is just
+              the server being down: the link opens, finds nothing useful,
+              and the user is no worse off than before it existed. */}
+          {unreachable && (
+            <p className="state__hint">
+              Si tu sesión expiró,{' '}
+              <a href={apiUrl('/products')} target="_blank" rel="noopener noreferrer">
+                reautentícate en una pestaña nueva
+              </a>{' '}
+              y vuelve a intentar.
+            </p>
+          )}
           <button type="button" onClick={reload}>
             Reintentar
           </button>

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { AxiosError } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductList } from '@/pages/ProductList'
@@ -134,6 +135,18 @@ describe('ProductList', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+    // Not this failure's cause — no reauth link offered for it.
+    expect(screen.queryByText(/reautentícate/i)).not.toBeInTheDocument()
+  })
+
+  it('offers a Cloudflare Access reauth link when the backend looks unreachable', async () => {
+    mockedList.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'))
+
+    render(<ProductList />)
+
+    const link = await screen.findByRole('link', { name: /reautentícate en una pestaña nueva/i })
+    expect(link).toHaveAttribute('href', `${window.location.origin}/api/products`)
+    expect(link).toHaveAttribute('target', '_blank')
   })
 })
 
