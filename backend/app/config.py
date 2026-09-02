@@ -26,8 +26,15 @@ class Settings(BaseSettings):
     )
 
     # ── Database ─────────────────────────────────────────────────────────────
-    # Points at the shared apollo-server-db instance. CaduTrack owns the
-    # database named by db_name and the schema named by db_schema inside it.
+    # CaduTrack owns the database named by db_name and the schema named by
+    # db_schema inside it.
+    #
+    # Set directly by compose.yaml, pointed at the bundled Postgres it also
+    # brings up — see #56. Overriding DATABASE_URL in .env points the app at
+    # a different instance entirely (a shared one, say) with no code change;
+    # the db_* fields below are then only a convenience for running the API
+    # directly on your machine, without Docker.
+    database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "cadutrack"
@@ -82,7 +89,22 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """SQLAlchemy connection URL built from the DB_* settings."""
+        """SQLAlchemy connection URL — DATABASE_URL verbatim when set,
+        otherwise built from the DB_* settings.
+
+        A bare "postgresql://" is rewritten to "postgresql+psycopg://":
+        that scheme is what every DATABASE_URL convention outside this repo
+        actually uses (Heroku-style envs, other tools' own docs), and
+        SQLAlchemy would otherwise reach for psycopg2, which this app does
+        not install — see #56, where DATABASE_URL first became something
+        someone other than this repo's own compose.yaml might set.
+        """
+        if self.database_url_override:
+            url = self.database_url_override
+            if url.startswith("postgresql://"):
+                url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
+            return url
+
         auth = quote_plus(self.db_user)
         if self.db_password:
             auth = f"{auth}:{quote_plus(self.db_password)}"

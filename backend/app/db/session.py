@@ -17,10 +17,10 @@ engine = create_engine(
     future=True,
     connect_args={
         "connect_timeout": settings.db_connect_timeout,
-        # Pin the schema at connection setup rather than with a SET statement.
-        # apollo-server-db is shared, so we never rely on the default
-        # search_path — and a SET issued from a "connect" event runs inside a
-        # transaction that SQLAlchemy later rolls back, silently losing it.
+        # Pin the schema at connection setup rather than with a SET statement,
+        # so this never relies on the default search_path — and a SET issued
+        # from a "connect" event runs inside a transaction that SQLAlchemy
+        # later rolls back, silently losing it.
         "options": f"-c search_path={settings.db_schema},public",
     },
 )

@@ -21,7 +21,7 @@ services:
     depends_on:
       - cadutrack-api
     networks:
-      - apollo-server-network
+      - cadutrack-network
 
   cadutrack-api:
     # Pin to a specific version for reproducible deployments:
@@ -35,16 +35,61 @@ services:
     env_file:
       - .env
     environment:
-      # Reach the shared PostgreSQL by container name on apollo-server-network,
-      # so the host port mapping is irrelevant here.
-      DB_HOST: ${DB_HOST:-apollo-server-db}
-      DB_PORT: ${DB_PORT:-5432}
+      # The bundled cadutrack-db below, by default — override DATABASE_URL
+      # in .env to point at a different instance entirely (a shared one,
+      # say) with no code or image change. See #56.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://cadutrack:${DB_PASSWORD}@cadutrack-db:5432/cadutrack}
+      # env_file above hands this container every variable in .env,
+      # DB_ADMIN_PASSWORD included — verified directly with `docker compose
+      # config`. That is the bootstrap superuser's own password, good for
+      # far more than this app needs; blanking it here is the difference
+      # between "unused" and "not present" if this container is ever
+      # compromised.
+      DB_ADMIN_PASSWORD: ""
     restart: unless-stopped
+    depends_on:
+      cadutrack-db:
+        condition: service_healthy
     # No log volume: the container writes only to stdout, which the host's log
     # pipeline collects. See https://server-documentation.apollox10.com
     networks:
-      - apollo-server-network
+      - cadutrack-network
+
+  cadutrack-db:
+    # CaduTrack's own Postgres — not shared with any other service. See #56:
+    # a shared instance was a detail of one homelab's deployment that had
+    # leaked into this application's design, and "you need a Postgres that
+    # also serves another of my services" is a bad self-hosting story.
+    image: postgres:16-alpine
+    container_name: cadutrack-db
+    environment:
+      # Bootstraps the cluster's own superuser, used once — only by
+      # db/init/01-create-app-role.sh, and only on a genuinely empty data
+      # directory — to create the actual, deliberately unprivileged role
+      # cadutrack-api connects as. Never passed to cadutrack-api itself.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD}
+      # Read by db/init/01-create-app-role.sh to set the app role's own
+      # password — the same value cadutrack-api's DATABASE_URL above
+      # connects with.
+      CADUTRACK_DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - cadutrack-db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cadutrack-network
 
 networks:
-  apollo-server-network:
-    external: true
+  # Not external, and not apollo-server-network — see #56. This network
+  # exists only to let cadutrack-api reach its own bundled cadutrack-db;
+  # nothing outside this compose file needs to join it.
+  cadutrack-network:
+
+volumes:
+  cadutrack-db-data:
