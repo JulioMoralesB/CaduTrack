@@ -245,11 +245,43 @@ of settings; every one of them is valid in either file.
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_NAME` | Backend file only — the no-Docker path's own connection parts |
 | `DB_SCHEMA`           | Schema owned by this service (`cadutrack`)         |
 | `API_KEY`             | Protects mutating endpoints via `X-API-Key`        |
+| `SUMMARY_API_KEY`     | Required for `GET /summary` — see below. Unset means the endpoint refuses everything, not that it's open |
 | `TELEGRAM_BOT_TOKEN`  | Token from @BotFather                              |
 | `TELEGRAM_CHAT_ID`    | Target chat ID for alerts                          |
 | `ALERT_DAYS_AHEAD`    | Days before expiry to trigger alert                |
 | `TIMEZONE`            | IANA timezone for log timestamps and alert times   |
 | `LOG_FILE`            | Rotating JSON log path; empty means stdout only    |
+
+---
+
+## Dashboard summary contract
+
+`GET /summary` exists for `apollo-server-dashboard` — see
+[ADR 012](https://server-documentation.apollox10.com/decisions/012-service-integration/).
+It is a small, additive-only contract, deliberately not a reflection of the
+internal API: a field may be added, but an existing one changing shape or
+disappearing is a breaking change.
+
+Requires `X-API-Key: <SUMMARY_API_KEY>`. Missing, wrong, or unconfigured all
+get a `401` — there is no unauthenticated mode for this one.
+
+```json
+{
+  "expired": 2,
+  "expiring_soon": 3,
+  "next": { "name": "Nopalitos", "expires_at": "2026-09-01" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `expired` | Active products already past `expires_at` |
+| `expiring_soon` | Active products expiring within 7 days, today included |
+| `next` | The single most urgent active product — soonest `expires_at`, regardless of which bucket it falls in. `null` when nothing is active |
+
+A database problem is a `500`, never a `0` that reads as good news — see
+`app/expiry.py` for the shared thresholds this reuses rather than
+re-deriving.
 
 ---
 

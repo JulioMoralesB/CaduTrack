@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     api_port: int = 8001
     # When set, mutating endpoints require this value in the X-API-Key header.
     api_key: str = ""
+    # A dedicated shared secret for the dashboard summary endpoint — see #93
+    # and ADR 012. Deliberately separate from api_key above (which nothing
+    # currently enforces — see #114): unset here does not mean "disabled"
+    # the way it does for api_key, since this endpoint sits on a published
+    # port with nothing else standing in front of it. See
+    # routers/summary.py's own require_summary_api_key.
+    summary_api_key: str = ""
     # Origins allowed to call the API from a browser (comma-separated in .env).
     cors_origins: str = "http://localhost:5173"
 
