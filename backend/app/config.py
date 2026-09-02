@@ -49,14 +49,24 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     # Not 8000: free-games-notifier already publishes that port on the host.
     api_port: int = 8001
-    # When set, mutating endpoints require this value in the X-API-Key header.
+    # One of two ways to satisfy RequireAuthOnMutations (main.py) on a
+    # mutating request — the other is a valid Cloudflare Access session,
+    # see cf_access_team_domain/cf_access_aud below. Leaving all three of
+    # these unset disables the check entirely — see #114 — rather than
+    # locking a fresh, unconfigured deployment out of its own product list.
     api_key: str = ""
+    # Cloudflare Access team domain (just the subdomain — "apollox10" for
+    # apollox10.cloudflareaccess.com, not the full URL) and the target
+    # Access Application's own Audience (AUD) tag, from that application's
+    # Overview page in the Zero Trust dashboard. Both are required together
+    # to validate a request's Cf-Access-Jwt-Assertion header — see #114.
+    cf_access_team_domain: str = ""
+    cf_access_aud: str = ""
     # A dedicated shared secret for the dashboard summary endpoint — see #93
-    # and ADR 012. Deliberately separate from api_key above (which nothing
-    # currently enforces — see #114): unset here does not mean "disabled"
-    # the way it does for api_key, since this endpoint sits on a published
-    # port with nothing else standing in front of it. See
-    # routers/summary.py's own require_summary_api_key.
+    # and ADR 012. Deliberately separate from api_key above: unlike the
+    # mutation check, unset here does not mean "disabled" — this endpoint
+    # sits on a published port with nothing else standing in front of it.
+    # See routers/summary.py's own require_summary_api_key.
     summary_api_key: str = ""
     # Origins allowed to call the API from a browser (comma-separated in .env).
     cors_origins: str = "http://localhost:5173"
