@@ -37,4 +37,17 @@ describe('StaleBanner', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Sin conexión')
     expect(screen.getByRole('status')).toHaveTextContent('datos guardados')
   })
+
+  it('always offers the reauth link — see #112', () => {
+    // This banner is the only place a Cloudflare Access session expiring is
+    // ever visible: the service worker's own cache fallback (sw.ts) hides
+    // the failure from axios entirely, so ProductList's own error-triggered
+    // reauth link never gets a chance to render. Unconditional here for the
+    // same reason it is harmless in that other state: a genuinely offline
+    // device just gets a link that fails to load, no worse off than before.
+    render(<StaleBanner cachedAt={ago(60_000)} />)
+
+    const link = screen.getByRole('link', { name: 'reautentícate aquí' })
+    expect(link).toHaveAttribute('href', expect.stringContaining('/reauth'))
+  })
 })

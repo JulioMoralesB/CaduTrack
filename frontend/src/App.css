@@ -578,6 +578,15 @@
   font-weight: 600;
 }
 
+.stale-banner__status {
+  margin: 0;
+}
+
+.stale-banner__hint {
+  margin: 0.3rem 0 0;
+  font-weight: 400;
+}
+
 /* History */
 
 .product-history {
