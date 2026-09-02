@@ -244,7 +244,8 @@ of settings; every one of them is valid in either file.
 | `DATABASE_URL`        | Overrides everything above to point at a different PostgreSQL entirely |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_NAME` | Backend file only — the no-Docker path's own connection parts |
 | `DB_SCHEMA`           | Schema owned by this service (`cadutrack`)         |
-| `API_KEY`             | Protects mutating endpoints via `X-API-Key`        |
+| `API_KEY`             | One of two ways to protect mutating endpoints via `X-API-Key` — see below. Unset (with `CF_ACCESS_*` also unset) means every mutation is allowed |
+| `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` | The other way — validates the app's own Cloudflare Access session, no frontend changes needed. Both required together |
 | `SUMMARY_API_KEY`     | Required for `GET /summary` — see below. Unset means the endpoint refuses everything, not that it's open |
 | `TELEGRAM_BOT_TOKEN`  | Token from @BotFather                              |
 | `TELEGRAM_CHAT_ID`    | Target chat ID for alerts                          |
