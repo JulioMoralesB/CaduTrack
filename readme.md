@@ -50,7 +50,9 @@ weeks earlier, because the repo still described it.
 cadutrack/
 ├── frontend/       # React + Vite + TypeScript PWA
 ├── backend/        # FastAPI + PostgreSQL + APScheduler
-└── db/init/        # First-boot scripts for the bundled cadutrack-db container
+└── db/             # cadutrack-db: postgres:16-alpine plus its own first-boot
+    ├── Dockerfile  #   init script, baked in — published, not bind-mounted,
+    └── init/       #   so a compose.yaml + .env deploy needs nothing else on disk
 ```
 
 ---
