@@ -60,7 +60,19 @@ services:
     # a shared instance was a detail of one homelab's deployment that had
     # leaked into this application's design, and "you need a Postgres that
     # also serves another of my services" is a bad self-hosting story.
-    image: postgres:16-alpine
+    #
+    # A published image, not plain postgres:16-alpine with db/init bind-
+    # mounted from the repo: a bind mount only works when the repo is
+    # checked out next to compose.yaml, and the documented deploy path is
+    # copying just compose.yaml and .env (Dockge does exactly this) — a
+    # bind mount to a file that was never copied silently mounts nothing,
+    # and the init script never runs. Learned this the hard way deploying
+    # #56 itself. See db/Dockerfile.
+    # Pin to a specific version for reproducible deployments:
+    # image: ghcr.io/juliomoralesb/cadutrack-db:0.1.0
+    image: ghcr.io/juliomoralesb/cadutrack-db:latest
+    # build:
+    #   context: ./db
     container_name: cadutrack-db
     environment:
       # Bootstraps the cluster's own superuser, used once — only by
@@ -75,7 +87,6 @@ services:
       CADUTRACK_DB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - cadutrack-db-data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]

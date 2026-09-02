@@ -124,3 +124,63 @@ jobs:
           subject-name: ghcr.io/juliomoralesb/cadutrack-api
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+  # ─── Database image: postgres:16-alpine plus this service's own init
+  #     script, baked in rather than bind-mounted — see #56's own follow-up
+  #     and db/Dockerfile for why a bind mount does not survive a deploy
+  #     that only copies compose.yaml and .env. ───────────────────────────────
+  db:
+    name: Build and push database image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/juliomoralesb/cadutrack-db
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./db
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Separate scope from the other two jobs, or they evict each
+          # other's layers from the shared Actions cache.
+          cache-from: type=gha,scope=db
+          cache-to: type=gha,mode=max,scope=db
+
+      - name: Generate provenance attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/juliomoralesb/cadutrack-db
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
