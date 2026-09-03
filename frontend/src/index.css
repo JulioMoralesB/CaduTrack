@@ -104,3 +104,24 @@ button:focus-visible {
 textarea {
   resize: vertical;
 }
+
+/* A plain <input type="file"> otherwise shows the browser's own native
+   button here — the one control in the app that ignores the theme
+   entirely, most visible on the label-photo field in ProductForm. The
+   surrounding box already picks up the themed border/background from the
+   input rule above; this covers the inner button the browser draws for
+   itself. */
+input[type='file']::file-selector-button {
+  font: inherit;
+  padding: 0.5rem 0.9rem;
+  margin-right: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+input[type='file']::file-selector-button:hover {
+  border-color: var(--accent);
+}

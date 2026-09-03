@@ -93,7 +93,11 @@
 }
 
 .product-card__icon-button {
-  padding: 0;
+  /* Measured at 22x20px with padding: 0 — the smallest tappable control
+     in the app, on a row that's tapped standing at the fridge. The emoji
+     itself stays the same visual size (font-size unchanged); this just
+     grows the hit area around it. */
+  padding: 0.5rem;
   border: none;
   background: none;
   font-size: 1.25rem;
@@ -488,8 +492,12 @@
 }
 
 .filters__field select {
-  padding: 0.45rem 0.55rem;
-  font-size: 0.875rem;
+  /* 1rem, not the smaller size every other label-adjacent text in this
+     block uses: iOS Safari auto-zooms the whole page on focus of any
+     control whose computed font-size is under 16px, and these four
+     selects are the single most-tapped controls on the main screen. */
+  padding: 0.6rem 0.65rem;
+  font-size: 1rem;
 }
 
 .filters__summary {
