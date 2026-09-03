@@ -23,6 +23,9 @@ def main() -> None:
         "app.main:app",
         host=settings.api_host,
         port=settings.api_port,
+        # See config.py's own comment: only set in the container, where
+        # nginx actually proxies under this prefix.
+        root_path=settings.api_root_path,
         # log_config=None leaves the loggers alone, so uvicorn's records
         # propagate to the root handler set up above.
         log_config=None,
