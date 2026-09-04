@@ -70,9 +70,9 @@ def test_counts_expired_and_expiring_soon_separately(api_client, summary_key):
     assert body["expiring_soon"] == 1
 
 
-def test_next_is_the_single_most_urgent_product_even_if_only_fresh(api_client, summary_key):
+def test_next_names_the_single_most_urgent_product_even_if_only_fresh(api_client, summary_key):
     """No expired or expiring_soon product exists — next must still name
-    the soonest one, not report null just because nothing is urgent yet."""
+    the soonest one, not report empty just because nothing is urgent yet."""
     today = date.today()
     api_client.post("/products", json=_product(name="Más lejano", expires_at=str(today + timedelta(days=60))))
     api_client.post("/products", json=_product(name="Más próximo", expires_at=str(today + timedelta(days=30))))
@@ -81,13 +81,32 @@ def test_next_is_the_single_most_urgent_product_even_if_only_fresh(api_client, s
 
     assert body["expired"] == 0
     assert body["expiring_soon"] == 0
-    assert body["next"] == {"name": "Más próximo", "expires_at": str(today + timedelta(days=30))}
+    assert body["next"] == [{"name": "Más próximo", "expires_at": str(today + timedelta(days=30))}]
 
 
-def test_next_is_null_when_there_are_no_active_products(api_client, summary_key):
+def test_next_lists_every_product_tied_for_soonest(api_client, summary_key):
+    """A same-day tie is the common case (a shopping trip usually adds
+    several products at once), not an edge case — every one of them
+    belongs in next, not just whichever the query happened to return
+    first."""
+    today = date.today()
+    tied_at = today + timedelta(days=3)
+    api_client.post("/products", json=_product(name="Yogurt", expires_at=str(tied_at)))
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(tied_at)))
+    api_client.post("/products", json=_product(name="Más lejano", expires_at=str(today + timedelta(days=30))))
+
     body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
 
-    assert body == {"expired": 0, "expiring_soon": 0, "next": None}
+    assert {(item["name"], item["expires_at"]) for item in body["next"]} == {
+        ("Yogurt", str(tied_at)),
+        ("Leche", str(tied_at)),
+    }
+
+
+def test_next_is_empty_when_there_are_no_active_products(api_client, summary_key):
+    body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
+
+    assert body == {"expired": 0, "expiring_soon": 0, "next": []}
 
 
 def test_a_consumed_product_is_excluded_entirely(api_client, summary_key):
@@ -99,7 +118,7 @@ def test_a_consumed_product_is_excluded_entirely(api_client, summary_key):
 
     body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
 
-    assert body == {"expired": 0, "expiring_soon": 0, "next": None}
+    assert body == {"expired": 0, "expiring_soon": 0, "next": []}
 
 
 def test_the_response_shape_is_exactly_the_documented_contract(api_client, summary_key):
@@ -111,4 +130,5 @@ def test_the_response_shape_is_exactly_the_documented_contract(api_client, summa
     body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
 
     assert set(body.keys()) == {"expired", "expiring_soon", "next"}
-    assert set(body["next"].keys()) == {"name", "expires_at"}
+    assert isinstance(body["next"], list)
+    assert set(body["next"][0].keys()) == {"name", "expires_at"}

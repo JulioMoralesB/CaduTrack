@@ -270,7 +270,10 @@ get a `401` — there is no unauthenticated mode for this one.
 {
   "expired": 2,
   "expiring_soon": 3,
-  "next": { "name": "Nopalitos", "expires_at": "2026-09-01" }
+  "next": [
+    { "name": "Nopalitos", "expires_at": "2026-09-01" },
+    { "name": "Yogurt griego", "expires_at": "2026-09-01" }
+  ]
 }
 ```
 
@@ -278,7 +281,7 @@ get a `401` — there is no unauthenticated mode for this one.
 |---|---|
 | `expired` | Active products already past `expires_at` |
 | `expiring_soon` | Active products expiring within 7 days, today included |
-| `next` | The single most urgent active product — soonest `expires_at`, regardless of which bucket it falls in. `null` when nothing is active |
+| `next` | Every active product tied for soonest `expires_at`, regardless of which bucket that date falls in — a same-day tie is common, not an edge case. `[]` when nothing is active |
 
 A database problem is a `500`, never a `0` that reads as good news — see
 `app/expiry.py` for the shared thresholds this reuses rather than

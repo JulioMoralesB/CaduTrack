@@ -62,8 +62,14 @@ def get_summary(db: Session = Depends(get_db)) -> SummaryResponse:
         elif bucket == ExpiryStatus.EXPIRING_SOON:
             expiring_soon += 1
 
-    # rows is already sorted soonest-first, so the first row — regardless of
-    # its own bucket — is the single most urgent thing to name.
-    next_product = SummaryNextProduct(name=rows[0].name, expires_at=rows[0].expires_at) if rows else None
+    # rows is already sorted soonest-first, so every row sharing the first
+    # row's own date — not just the first row itself — is equally the most
+    # urgent thing to name. A same-day tie is the common case, not an edge
+    # case: a shopping trip usually adds several products at once.
+    next_products = [
+        SummaryNextProduct(name=name, expires_at=expires_at)
+        for name, expires_at in rows
+        if expires_at == rows[0].expires_at
+    ]
 
-    return SummaryResponse(expired=expired, expiring_soon=expiring_soon, next=next_product)
+    return SummaryResponse(expired=expired, expiring_soon=expiring_soon, next=next_products)
