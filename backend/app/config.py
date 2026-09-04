@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     # Not 8000: free-games-notifier already publishes that port on the host.
     api_port: int = 8001
+    # Set to "/api" by compose.yaml only — nginx proxies /api/* to this
+    # service, stripping the prefix before the request ever reaches here
+    # (see frontend/nginx.conf). Without telling FastAPI about that prefix,
+    # /api/docs loads fine but its Swagger UI then fetches /openapi.json
+    # (absolute, no prefix) for the actual spec — a path nginx does not
+    # proxy, so it falls through to the SPA's index.html, which Swagger UI
+    # then fails to parse as JSON. Left empty for a direct `uvicorn` run
+    # (see the readme's own Getting Started), where there is no proxy and
+    # no prefix to account for.
+    api_root_path: str = ""
     # One of two ways to satisfy RequireAuthOnMutations (main.py) on a
     # mutating request — the other is a valid Cloudflare Access session,
     # see cf_access_team_domain/cf_access_aud below. Leaving all three of

@@ -46,6 +46,11 @@ services:
       # between "unused" and "not present" if this container is ever
       # compromised.
       DB_ADMIN_PASSWORD: ""
+      # nginx proxies /api/* here with the prefix stripped — see
+      # frontend/nginx.conf and app/config.py's own comment on
+      # api_root_path. Fixed, not a .env setting: it is a fact of this
+      # compose file's own nginx rule, not something a deployer chooses.
+      API_ROOT_PATH: /api
     restart: unless-stopped
     depends_on:
       cadutrack-db:
