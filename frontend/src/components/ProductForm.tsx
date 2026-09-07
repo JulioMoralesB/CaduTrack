@@ -173,11 +173,14 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
         setPendingBarcode({ itemCode: result.item_code, icon: result.icon })
         setBarcodeHint(
           result.name || result.quantity
-            ? 'Código escaneado. Revisa los datos antes de guardar.'
-            : 'Código leído, pero sin información conocida. Completa los campos manualmente.',
+            ? `Código ${raw} escaneado. Revisa los datos antes de guardar.`
+            : `Código ${raw} leído, pero sin información conocida. Completa los campos manualmente.`,
         )
       } catch (caught) {
-        setBarcodeError(toErrorMessage(caught))
+        // Showing raw here too: a lookup failure and a misread look
+        // identical to the user otherwise, and this is the only place they
+        // can check the scanner actually saw the right digits.
+        setBarcodeError(`Código ${raw}: ${toErrorMessage(caught)}`)
       } finally {
         setBarcodeLookupPending(false)
       }

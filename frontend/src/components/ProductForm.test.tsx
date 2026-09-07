@@ -316,7 +316,7 @@ describe('ProductForm barcode scan', () => {
     // A barcode never carries an expiry date — see #30 — so this is left
     // exactly as it started, for the user to fill in by hand.
     expect(screen.getByLabelText('Caduca el')).toHaveValue('')
-    expect(screen.getByText('Código escaneado. Revisa los datos antes de guardar.')).toBeInTheDocument()
+    expect(screen.getByText('Código 5449000000996 escaneado. Revisa los datos antes de guardar.')).toBeInTheDocument()
   })
 
   it('leaves a field the lookup could not resolve untouched', async () => {
@@ -337,7 +337,9 @@ describe('ProductForm barcode scan', () => {
     scanBarcode()
 
     expect(
-      await screen.findByText('Código leído, pero sin información conocida. Completa los campos manualmente.'),
+      await screen.findByText(
+        'Código 5449000000996 leído, pero sin información conocida. Completa los campos manualmente.',
+      ),
     ).toBeInTheDocument()
   })
 
@@ -347,7 +349,7 @@ describe('ProductForm barcode scan', () => {
 
     scanBarcode()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Código 5449000000996: Ocurrió un error inesperado.')
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
     expect(screen.getByLabelText('Nombre')).toHaveValue('Huevos')
   })
