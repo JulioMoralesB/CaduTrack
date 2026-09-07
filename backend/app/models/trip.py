@@ -51,6 +51,11 @@ class ShoppingTripItem(Base):
         ForeignKey("shopping_trips.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # The line's own printed text, before any expansion — the stable key
+    # app.receipt_name_cache remembers a correction against once this item
+    # resolves. `name` above is what the user actually sees and can correct;
+    # this never changes after creation. See #126.
+    raw_name: Mapped[str] = mapped_column(String(255), nullable=False, server_default="")
     quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     # The model's own guess at whether this line is worth tracking at all —
     # see #84: "non-food is a real fraction" of a typical receipt. Drives the

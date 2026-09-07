@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app import receipt_name_cache
 from app.db.session import get_db
 from app.models import Product, ShoppingTrip, ShoppingTripItem
-from app.receipt_client import extract_receipt
+from app.receipt_client import expand_names, extract_receipt
 from app.schemas.trip import (
     ShoppingTripItemRead,
     ShoppingTripItemResolve,
@@ -104,9 +105,33 @@ async def create_trip_from_receipt(
             detail="No se pudo leer el recibo. Agrega los productos manualmente.",
         )
 
+    # A name for every line, cache first — see #126. Only a raw text
+    # receipt_name_cache has never seen before ever reaches expand_names,
+    # so a repeat purchase costs one model call (the OCR pass above), not
+    # two, and a name the user already corrected once is never re-guessed.
+    resolved_names: dict[str, str] = {}
+    unseen_raw_names: set[str] = set()
+    for item in extraction.items:
+        if item.raw_name in resolved_names or item.raw_name in unseen_raw_names:
+            continue
+        cached_name = receipt_name_cache.get(db, item.raw_name)
+        if cached_name is not None:
+            resolved_names[item.raw_name] = cached_name
+        else:
+            unseen_raw_names.add(item.raw_name)
+
+    if unseen_raw_names:
+        resolved_names.update(expand_names(list(unseen_raw_names)))
+
     trip = ShoppingTrip(stated_item_count=extraction.stated_item_count)
     for item in extraction.items:
-        trip.items.append(ShoppingTripItem(name=item.name, quantity=item.quantity, is_food=item.is_food))
+        # A name expand_names couldn't produce (unconfigured, a failure, or
+        # simply dropped) falls back to the raw text itself — still usable,
+        # just uncorrected, same as before #126.
+        name = resolved_names.get(item.raw_name, item.raw_name)
+        trip.items.append(
+            ShoppingTripItem(name=name, raw_name=item.raw_name, quantity=item.quantity, is_food=item.is_food)
+        )
 
     db.add(trip)
     db.commit()
@@ -151,12 +176,15 @@ def drop_trip_item(trip_id: int, item_id: int, db: Session = Depends(get_db)) ->
 def resolve_trip_item(
     trip_id: int, item_id: int, payload: ShoppingTripItemResolve, db: Session = Depends(get_db)
 ) -> ShoppingTripItem:
-    """Link a line to the product it became, once the client has already
-    created that product through the normal POST /products."""
+    """Link a line to the product it became — either one just created
+    through the normal POST /products, or an existing one the user is
+    saying this line is really the same thing as (see #126: there is
+    nothing here that requires the product to be new)."""
     item = _get_item_or_404(db, trip_id, item_id)
     _require_unresolved(item)
 
-    if db.get(Product, payload.product_id) is None:
+    product = db.get(Product, payload.product_id)
+    if product is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Product {payload.product_id} does not exist",
@@ -166,5 +194,11 @@ def resolve_trip_item(
     item.product_id = payload.product_id
     db.commit()
     db.refresh(item)
+
+    # Whatever name the user actually settled on for this raw text — via
+    # the product just created, or the existing one just linked — so the
+    # next receipt with this same line never has to ask again. See #126.
+    receipt_name_cache.remember(db, item.raw_name, product.name)
+
     logger.info("Resolved trip item %s (%s) into product %s", item.id, item.name, payload.product_id)
     return item

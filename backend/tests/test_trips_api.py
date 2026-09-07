@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 
+from app import receipt_name_cache
 from app.receipt_client import ReceiptExtraction, ReceiptItem
 
 pytestmark = pytest.mark.integration
@@ -26,8 +27,8 @@ def _product(**overrides) -> dict:
 def _extraction(**overrides) -> ReceiptExtraction:
     defaults = {
         "items": [
-            ReceiptItem(name="Nopal limpio", quantity=Decimal("1.00"), is_food=True),
-            ReceiptItem(name="Jabón Grisi", quantity=Decimal("2.00"), is_food=False),
+            ReceiptItem(raw_name="Nopal limpio", quantity=Decimal("1.00"), is_food=True),
+            ReceiptItem(raw_name="Jabón Grisi", quantity=Decimal("2.00"), is_food=False),
         ],
         "stated_item_count": 3,
     }
@@ -51,6 +52,44 @@ def test_a_receipt_photo_creates_a_trip_with_its_items(api_client, mocker):
     ]
     assert body["stated_item_count"] == 3
     assert all(i["resolved_at"] is None and i["product_id"] is None for i in body["items"])
+
+
+def test_a_cached_raw_name_is_used_without_calling_expand_names(api_client, db_session, mocker):
+    """#126: a raw text receipt_name_cache already has an answer for never
+    has to be re-guessed."""
+    receipt_name_cache.remember(db_session, "Nopal limpio", "Nopal")
+    receipt_name_cache.remember(db_session, "Jabón Grisi", "Jabón")
+    expand = mocker.patch("app.routers.trips.expand_names")
+
+    response = _upload_receipt(api_client, mocker)
+
+    assert [item["name"] for item in response.json()["items"]] == ["Nopal", "Jabón"]
+    expand.assert_not_called()
+
+
+def test_expand_names_is_only_asked_about_names_not_already_cached(api_client, db_session, mocker):
+    receipt_name_cache.remember(db_session, "Nopal limpio", "Nopal")
+    expand = mocker.patch("app.routers.trips.expand_names", return_value={})
+
+    _upload_receipt(api_client, mocker)
+
+    expand.assert_called_once_with(["Jabón Grisi"])
+
+
+def test_an_uncached_raw_name_uses_expand_names_result(api_client, mocker):
+    mocker.patch("app.routers.trips.expand_names", return_value={"Nopal limpio": "Nopal expandido"})
+
+    response = _upload_receipt(api_client, mocker)
+
+    assert response.json()["items"][0]["name"] == "Nopal expandido"
+
+
+def test_a_name_expand_names_could_not_produce_falls_back_to_the_raw_text(api_client, mocker):
+    mocker.patch("app.routers.trips.expand_names", return_value={})
+
+    response = _upload_receipt(api_client, mocker)
+
+    assert response.json()["items"][0]["name"] == "Nopal limpio"
 
 
 def test_counted_quantity_and_reconciliation_match_when_they_should(api_client, mocker):
@@ -194,6 +233,37 @@ def test_resolving_an_item_links_it_to_a_real_product(api_client, mocker):
     body = response.json()
     assert body["resolved_at"] is not None
     assert body["product_id"] == product["id"]
+
+
+def test_resolving_remembers_the_products_name_for_the_lines_raw_text(api_client, db_session, mocker):
+    """#126: this is what makes the same raw text auto-resolve to the same
+    name on a future receipt, without ever asking the model twice."""
+    trip = _upload_receipt(api_client, mocker).json()
+    item = trip["items"][0]
+    product = api_client.post("/products", json=_product(name="Nopal")).json()
+
+    api_client.post(f"/trips/{trip['id']}/items/{item['id']}/resolve", json={"product_id": product["id"]})
+
+    # "Nopal limpio" is _extraction()'s own raw_name for this item — see the
+    # module fixture above. It equals item["name"] here only because
+    # expand_names isn't reached (no ollama_url configured in tests); the
+    # cache key is always the raw text, not whatever name ended up displayed.
+    assert receipt_name_cache.get(db_session, "Nopal limpio") == "Nopal"
+
+
+def test_resolving_against_a_product_that_predates_the_trip_links_without_creating_a_new_one(api_client, mocker):
+    """#126: "vincular a producto existente" — resolve never required the
+    product to be freshly created, only that it exists."""
+    existing = api_client.post("/products", json=_product(name="Ya lo tenía")).json()
+    trip = _upload_receipt(api_client, mocker).json()
+    item = trip["items"][0]
+
+    response = api_client.post(
+        f"/trips/{trip['id']}/items/{item['id']}/resolve", json={"product_id": existing["id"]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["product_id"] == existing["id"]
 
 
 def test_resolving_against_a_nonexistent_product_is_rejected(api_client, mocker):

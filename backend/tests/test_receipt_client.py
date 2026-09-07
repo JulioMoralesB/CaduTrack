@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from app.config import settings
-from app.receipt_client import extract_receipt
+from app.receipt_client import expand_names, extract_receipt
 
 _REQUEST = httpx.Request("POST", "http://ollama.example:11434/api/generate")
 _IMAGE = b"\xff\xd8\xff fake bytes, never actually decoded in these tests"
@@ -54,7 +54,7 @@ def test_extracts_every_line_from_a_well_formed_response(mocker):
 
     result = extract_receipt(_IMAGE)
 
-    assert [(i.name, str(i.quantity), i.is_food) for i in result.items] == [
+    assert [(i.raw_name, str(i.quantity), i.is_food) for i in result.items] == [
         ("Nopal limpio", "1.00", True),
         ("Jabón Grisi", "2.00", False),
     ]
@@ -91,7 +91,7 @@ def test_a_malformed_line_is_dropped_not_the_whole_receipt(mocker, bad_item):
 
     result = extract_receipt(_IMAGE)
 
-    assert [i.name for i in result.items] == ["Nopal limpio"]
+    assert [i.raw_name for i in result.items] == ["Nopal limpio"]
 
 
 def test_returns_none_when_every_line_is_malformed(mocker):
@@ -171,3 +171,107 @@ def test_returns_none_when_the_response_field_is_not_json(mocker):
     )
 
     assert extract_receipt(_IMAGE) is None
+
+
+def _expand_response(items: list[dict]) -> httpx.Response:
+    return httpx.Response(
+        status_code=200,
+        json={"model": "qwen3.5:4b", "response": json.dumps({"items": items}), "done": True},
+        request=_REQUEST,
+    )
+
+
+class TestExpandNames:
+    """expand_names is text-only (no image) and best-effort — see #126: a
+    failure here must fall back to the raw text, never block the trip."""
+
+    def test_returns_empty_without_calling_the_model_when_ollama_is_not_configured(self, monkeypatch, mocker):
+        monkeypatch.setattr(settings, "ollama_url", "")
+        post = mocker.patch("app.receipt_client.httpx.post")
+
+        assert expand_names(["CHAMP CREMINI"]) == {}
+        post.assert_not_called()
+
+    def test_returns_empty_without_calling_the_model_for_an_empty_list(self, mocker):
+        post = mocker.patch("app.receipt_client.httpx.post")
+
+        assert expand_names([]) == {}
+        post.assert_not_called()
+
+    def test_maps_each_raw_name_to_its_expanded_guess_by_index(self, mocker):
+        """Matched back by index, not by asking the model to echo the raw
+        string — see _expand_prompt's own comment: tried the echo approach
+        first and it broke silently against the real model."""
+        mocker.patch(
+            "app.receipt_client.httpx.post",
+            return_value=_expand_response(
+                [
+                    {"index": 1, "name": "Champiñones cremini"},
+                    {"index": 2, "name": "Milanesa de pulpa negra"},
+                ]
+            ),
+        )
+
+        result = expand_names(["CHAMP CREMINI", "HEB MILANESA DE PULPA NEG"])
+
+        assert result == {
+            "CHAMP CREMINI": "Champiñones cremini",
+            "HEB MILANESA DE PULPA NEG": "Milanesa de pulpa negra",
+        }
+
+    def test_does_not_send_an_image(self, mocker):
+        post = mocker.patch(
+            "app.receipt_client.httpx.post", return_value=_expand_response([{"index": 1, "name": "Y"}])
+        )
+
+        expand_names(["X"])
+
+        _, kwargs = post.call_args
+        assert "images" not in kwargs["json"]
+
+    @pytest.mark.parametrize(
+        "bad_entry",
+        [
+            {"index": 0, "name": "Algo"},
+            {"index": 2, "name": "Algo"},
+            {"index": True, "name": "Algo"},
+            {"index": 1, "name": ""},
+            {"index": 1, "name": "   "},
+            {"name": "Algo"},
+            {"index": 1},
+            {"index": "1", "name": "Algo"},
+            "not even an object",
+        ],
+    )
+    def test_a_malformed_entry_is_simply_dropped(self, mocker, bad_entry):
+        mocker.patch(
+            "app.receipt_client.httpx.post",
+            return_value=_expand_response([{"index": 1, "name": "Bien"}, bad_entry]),
+        )
+
+        assert expand_names(["OK"]) == {"OK": "Bien"}
+
+    def test_returns_empty_on_a_connection_failure(self, mocker):
+        mocker.patch("app.receipt_client.httpx.post", side_effect=httpx.ConnectError("refused"))
+
+        assert expand_names(["X"]) == {}
+
+    def test_returns_empty_on_an_http_error_status(self, mocker):
+        mocker.patch(
+            "app.receipt_client.httpx.post",
+            return_value=httpx.Response(status_code=500, text="boom", request=_REQUEST),
+        )
+
+        assert expand_names(["X"]) == {}
+
+    def test_returns_empty_when_the_response_field_is_not_json(self, mocker):
+        mocker.patch(
+            "app.receipt_client.httpx.post",
+            return_value=httpx.Response(
+                status_code=200,
+                json={"model": "qwen3.5:4b", "response": "not json", "done": True},
+                request=_REQUEST,
+            ),
+        )
+
+        assert expand_names(["X"]) == {}

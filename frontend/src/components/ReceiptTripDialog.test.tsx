@@ -177,6 +177,48 @@ describe('ReceiptTripDialog duplicate flagging', () => {
   })
 })
 
+describe('ReceiptTripDialog link to existing', () => {
+  // Real, unmocked "now" — same reasoning as the duplicate-flagging block
+  // above.
+  function createdToday(): string {
+    return new Date().toISOString()
+  }
+
+  it('offers a link button only for a flagged duplicate', () => {
+    const existing = product({ name: 'Nopal limpio', created_at: createdToday() })
+    renderDialog(
+      { items: [tripItem({ id: 1, name: 'Nopal limpio' }), tripItem({ id: 2, name: 'Plátano' })] },
+      [existing],
+    )
+
+    expect(screen.getAllByRole('button', { name: 'Vincular' })).toHaveLength(1)
+  })
+
+  it('resolves straight to the existing product, without ProductForm', async () => {
+    const existing = product({ id: 9, name: 'Nopal limpio', created_at: createdToday() })
+    mockedResolve.mockResolvedValue(tripItem({ id: 1, resolved_at: '2026-09-01T00:00:00Z', product_id: 9 }))
+    const { onTripChanged } = renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular' }))
+
+    await waitFor(() => expect(mockedResolve).toHaveBeenCalledWith(1, 1, 9))
+    expect(mockedCreate).not.toHaveBeenCalled()
+    expect(onTripChanged).toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('Nopal limpio')).not.toBeInTheDocument())
+  })
+
+  it('shows the error and leaves the item in place when linking fails', async () => {
+    const existing = product({ id: 9, name: 'Nopal limpio', created_at: createdToday() })
+    mockedResolve.mockRejectedValue(new Error('nope'))
+    renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(screen.getByText('Nopal limpio')).toBeInTheDocument()
+  })
+})
+
 describe('ReceiptTripDialog continue', () => {
   it('drops every unticked item and notifies the parent', async () => {
     mockedDrop.mockResolvedValue(tripItem({ resolved_at: '2026-09-01T00:00:00Z' }))

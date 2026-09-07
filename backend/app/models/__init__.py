@@ -7,6 +7,7 @@ Base.metadata before autogenerate runs.
 from app.models.barcode import BarcodeLookup
 from app.models.category import Category
 from app.models.product import IconSource, Location, Product
+from app.models.receipt_name import ReceiptNameLookup
 from app.models.setting import AlertSettings, IconNameCache, IconSettings
 from app.models.trip import ShoppingTrip, ShoppingTripItem
 
@@ -19,6 +20,7 @@ __all__ = [
     "IconSource",
     "Location",
     "Product",
+    "ReceiptNameLookup",
     "ShoppingTrip",
     "ShoppingTripItem",
 ]
