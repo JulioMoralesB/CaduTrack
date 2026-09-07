@@ -64,8 +64,19 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
   // handleLinkToExisting. Only one link action can be in flight at a time,
   // the same as the queue only ever creating one product at a time.
   const [linking, setLinking] = useState<number | null>(null)
+  // Which item's manual "link to an existing product" picker is open, if
+  // any — see #128. Separate from the automatic same-day match above: that
+  // one only ever offers the one product findDuplicateToday found, this is
+  // for everything else (a different day, a name that doesn't match).
+  const [manualLinkFor, setManualLinkFor] = useState<number | null>(null)
+  const [manualLinkProductId, setManualLinkProductId] = useState('')
 
   const pending = items.filter((item) => itemState(item) === 'pending')
+  // Sorted once, not per row — nothing about this list depends on which
+  // item's picker is open.
+  const activeProducts = [...products]
+    .filter((product) => product.consumed_at === null)
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
   const toggle = (itemId: number) =>
     setTicked((current) => ({ ...current, [itemId]: !current[itemId] }))
@@ -115,6 +126,24 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
         setLinking(null)
       }
     })()
+  }
+
+  const openManualLink = (item: ShoppingTripItem) => {
+    setManualLinkFor(item.id)
+    setManualLinkProductId('')
+    setError(null)
+  }
+
+  const closeManualLink = () => {
+    setManualLinkFor(null)
+    setManualLinkProductId('')
+  }
+
+  const confirmManualLink = (item: ShoppingTripItem) => {
+    const product = activeProducts.find((candidate) => candidate.id === Number(manualLinkProductId))
+    if (!product) return
+    handleLinkToExisting(item, product)
+    closeManualLink()
   }
 
   /** After a product is created for the item at the front of the queue,
@@ -207,37 +236,86 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
         <ul className="trip-checklist">
           {pending.map((item) => {
             const duplicate = findDuplicateToday(products, item.name)
+            const picking = manualLinkFor === item.id
             return (
               <li key={item.id} className="trip-checklist__row">
-                <label className="trip-checklist__label">
-                  <input
-                    type="checkbox"
-                    checked={ticked[item.id] ?? item.is_food}
-                    onChange={() => toggle(item.id)}
-                  />
-                  <span className="trip-checklist__name">{item.name}</span>
-                  {/* A sibling of the (truncating) name, not nested inside
-                      it — flex-shrink: 0 keeps this visible even for a
-                      long name, the same way the quantity on the right
-                      already does. Un-ticking is only the default, not a
-                      decision made for the user — this is why, so a
-                      re-tick (a second purchase of the same thing, same
-                      day) is a choice made with the same information
-                      ProductForm's own check would otherwise surface only
-                      after opening the form. See #108. */}
-                  {duplicate && <span className="trip-checklist__badge">Ya lo tienes hoy</span>}
-                </label>
-                {duplicate && (
-                  <button
-                    type="button"
-                    className="trip-checklist__link-button"
-                    onClick={() => handleLinkToExisting(item, duplicate)}
-                    disabled={linking === item.id || submitting}
-                  >
-                    {linking === item.id ? 'Vinculando…' : 'Vincular'}
-                  </button>
-                )}
-                <span className="trip-checklist__quantity">{quantityLabel(item.quantity, null)}</span>
+                <div className="trip-checklist__top">
+                  <label className="trip-checklist__label">
+                    <input
+                      type="checkbox"
+                      checked={ticked[item.id] ?? item.is_food}
+                      onChange={() => toggle(item.id)}
+                    />
+                    <span className="trip-checklist__name">{item.name}</span>
+                    {/* A sibling of the (truncating) name, not nested inside
+                        it — flex-shrink: 0 keeps this visible even for a
+                        long name, the same way the quantity on the right
+                        already does. Un-ticking is only the default, not a
+                        decision made for the user — this is why, so a
+                        re-tick (a second purchase of the same thing, same
+                        day) is a choice made with the same information
+                        ProductForm's own check would otherwise surface only
+                        after opening the form. See #108. */}
+                    {duplicate && <span className="trip-checklist__badge">Ya lo tienes hoy</span>}
+                  </label>
+                  {duplicate && (
+                    <button
+                      type="button"
+                      className="trip-checklist__link-button"
+                      onClick={() => handleLinkToExisting(item, duplicate)}
+                      disabled={linking === item.id || submitting}
+                    >
+                      {linking === item.id ? 'Vinculando…' : 'Vincular'}
+                    </button>
+                  )}
+                  <span className="trip-checklist__quantity">{quantityLabel(item.quantity, null)}</span>
+                </div>
+                {/* The automatic match above only ever offers the one
+                    product findDuplicateToday found — same name, same
+                    calendar day. This is for everything else: a different
+                    day, or a name the receipt just doesn't match. See #128. */}
+                {activeProducts.length > 0 &&
+                  (picking ? (
+                    <div className="trip-checklist__manual-link">
+                      <select
+                        className="trip-checklist__manual-link-select"
+                        aria-label={`Vincular ${item.name} a un producto existente`}
+                        value={manualLinkProductId}
+                        onChange={(event) => setManualLinkProductId(event.target.value)}
+                      >
+                        <option value="">Elige un producto…</option>
+                        {activeProducts.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="trip-checklist__link-button"
+                        onClick={() => confirmManualLink(item)}
+                        disabled={!manualLinkProductId || linking === item.id || submitting}
+                      >
+                        {linking === item.id ? 'Vinculando…' : 'Confirmar'}
+                      </button>
+                      {/* Not "Cancelar" — the dialog's own Cancelar button
+                          below already carries that name, and two controls
+                          sharing one accessible name is exactly what a
+                          screen reader user cannot tell apart. */}
+                      <button type="button" className="trip-checklist__link-button" onClick={closeManualLink}>
+                        Cancelar vínculo
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="trip-checklist__manual-link-toggle"
+                      onClick={() => openManualLink(item)}
+                      disabled={submitting}
+                    >
+                      Vincular a producto existente
+                    </button>
+                  ))}
               </li>
             )
           })}
