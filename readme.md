@@ -100,6 +100,7 @@ cadutrack/
 | `icon_name_cache` | Local name → emoji lookup, consulted before falling back to the vision model |
 | `shopping_trips`, `shopping_trip_items` | A receipt photo's checklist; a resolved item links to the `products` row it became |
 | `barcode_lookups` | What a scanned barcode was called (and iconned) last time |
+| `receipt_name_lookup` | What a receipt line's raw printed text was named last time it resolved into a product |
 
 > CaduTrack owns the database `cadutrack` and the schema `cadutrack` inside it,
 > on its own bundled PostgreSQL — `compose.yaml` brings up `cadutrack-db`

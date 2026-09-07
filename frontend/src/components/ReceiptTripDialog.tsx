@@ -60,6 +60,10 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
   const [queue, setQueue] = useState<ShoppingTripItem[] | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The id of the item currently being linked, if any — see
+  // handleLinkToExisting. Only one link action can be in flight at a time,
+  // the same as the queue only ever creating one product at a time.
+  const [linking, setLinking] = useState<number | null>(null)
 
   const pending = items.filter((item) => itemState(item) === 'pending')
 
@@ -87,6 +91,28 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
         setError(toErrorMessage(caught))
       } finally {
         setSubmitting(false)
+      }
+    })()
+  }
+
+  /**
+   * Resolve a line straight into a product that already exists — see #126.
+   * The alternative to the queue above, for exactly the case its badge
+   * already flags: re-adding would just create a duplicate, so this skips
+   * ProductForm entirely and links the line to the product it actually is.
+   */
+  const handleLinkToExisting = (item: ShoppingTripItem, product: Product) => {
+    setLinking(item.id)
+    setError(null)
+    void (async () => {
+      try {
+        const resolved = await resolveTripItem(trip.id, item.id, product.id)
+        replaceItem(resolved)
+        onTripChanged()
+      } catch (caught) {
+        setError(toErrorMessage(caught))
+      } finally {
+        setLinking(null)
       }
     })()
   }
@@ -201,6 +227,16 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
                       after opening the form. See #108. */}
                   {duplicate && <span className="trip-checklist__badge">Ya lo tienes hoy</span>}
                 </label>
+                {duplicate && (
+                  <button
+                    type="button"
+                    className="trip-checklist__link-button"
+                    onClick={() => handleLinkToExisting(item, duplicate)}
+                    disabled={linking === item.id || submitting}
+                  >
+                    {linking === item.id ? 'Vinculando…' : 'Vincular'}
+                  </button>
+                )}
                 <span className="trip-checklist__quantity">{quantityLabel(item.quantity, null)}</span>
               </li>
             )

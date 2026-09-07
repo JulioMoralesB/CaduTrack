@@ -800,6 +800,12 @@
   white-space: nowrap;
 }
 
+.trip-checklist__link-button {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+}
+
 .trip-checklist__quantity {
   flex-shrink: 0;
   color: var(--text-muted);
