@@ -2,30 +2,27 @@
 
 ## Never use a real credential as a test fixture
 
-On 2026-08-30 the Telegram bot token was committed to this public repository in
-`backend/tests/test_config.py`, inside the regression test for #64 — the test
-whose entire purpose is proving that the token never reaches the logs. It was
-named `fake_token`. Someone found it and used the bot; the token was revoked on
-2026-09-01.
+On 2026-08-30 the Telegram bot token was committed to this public repo in
+`backend/tests/test_config.py` — the regression test for #64, whose entire
+purpose was proving the token never reaches the logs. Someone found it and
+used the bot; the token was revoked 2026-09-01.
 
-Two things made it survive review:
+Two things let it survive review:
 
-- **The name asserted the opposite of the truth.** `fake_token`, `dummy_`,
-  `test_`, `example_` are claims, not evidence. A reader who trusts the name
-  never looks at the value — and so does a human skimming a diff.
-- **The value was realistic on purpose.** Reaching for the real one is the
-  path of least resistance when a fixture needs to look real, and the real one
-  is sitting in `.env` next to you.
+- **The name asserted the opposite of the truth.** It was called
+  `fake_token`. `fake_`, `dummy_`, `test_`, `example_` are claims, not
+  evidence — a reader who trusts the name never checks the value.
+- **The value was realistic on purpose**, because the real one was sitting
+  in `.env` right there — the path of least resistance.
 
-So, when a test needs something credential-shaped:
+So when a test needs something credential-shaped:
 
-- **Construct it, do not paste it.** `"1234567890:" + "A" * 35` carries the
-  shape, cannot be a real value, and cannot be quietly replaced with one
-  without the diff making that obvious.
-- **Never read a value out of `.env`, the environment, a password manager, a
-  running container, or the deployed config to put in a test** — not even
-  temporarily while iterating.
-- Assume every value in this repository is public the moment it is committed.
-  This repository *is* public.
+- **Construct it, don't paste it.** `"1234567890:" + "A" * 35` carries the
+  shape, can't be a real value, and can't be swapped for one without the
+  diff showing it.
+- **Never copy a value out of `.env`, the environment, a password manager,
+  a running container, or deployed config into a test** — not even
+  temporarily.
+- Assume every value committed here is public — this repo *is* public.
 
-The same rule covers fixtures in issues, PR descriptions, and pasted logs.
+Same rule for fixtures in issues, PR descriptions, and pasted logs.

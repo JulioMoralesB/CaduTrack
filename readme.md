@@ -7,7 +7,15 @@ A food expiry tracker app to register purchased food items, their expiration dat
 ## Features
 
 - 📦 Register food items with name, category, quantity, unit, and storage location
+- 📷 Read a product's name, expiry date and weight straight from a photo of
+  its label, or import a whole shopping trip from a photo of the receipt —
+  both read locally by Ollama, nothing leaves the network
+- 🔖 Scan a barcode (GS1-128 or plain EAN-13) to identify a product; a
+  scanned code remembers what it was called last time
+- ⚠️ Warned about a likely duplicate — same name, same day — before it's
+  added twice, with the option to add it anyway, merge the quantity, or skip it
 - 📅 Track expiration dates with automatic status calculation (fresh / expiring soon / expired)
+- 🍽️ Mark a product consumed instead of deleting it, with a history to look back on
 - 🔔 A daily Telegram digest of what has expired or is about to, grouped by
   storage location — time, days ahead and on/off edited from the app itself
 - 📱 Installable on a phone as a Progressive Web App, with the product list
@@ -22,6 +30,7 @@ A food expiry tracker app to register purchased food items, their expiration dat
 |------------|-----------------------------------------|
 | Frontend   | React + Vite + TypeScript (PWA enabled) |
 | Backend    | FastAPI + SQLAlchemy + PostgreSQL       |
+| Vision     | Local Ollama (`qwen3.5:4b`) — label and receipt reading, icon lookup fallback |
 | Migrations | Alembic (schema-per-service)            |
 | Alerts     | APScheduler + Telegram Bot API          |
 | PWA        | vite-plugin-pwa + Workbox               |
@@ -67,18 +76,30 @@ cadutrack/
 | created_at | timestamp |
 
 ### `products`
-| Column     | Type                              |
-|------------|-----------------------------------|
-| id         | serial PK                         |
-| name       | text                              |
-| category_id| integer FK → categories           |
-| quantity   | numeric                           |
-| unit       | text                              |
-| expires_at | date                              |
-| location   | text (`fridge`, `freezer`, `pantry`) |
-| notes      | text                              |
-| created_at | timestamp                         |
-| updated_at | timestamp                         |
+| Column      | Type                              |
+|-------------|-----------------------------------|
+| id          | serial PK                         |
+| name        | text                              |
+| category_id | integer FK → categories           |
+| quantity    | numeric                           |
+| unit        | text                              |
+| expires_at  | date                              |
+| location    | text (`fridge`, `freezer`, `pantry`) |
+| icon        | text (an emoji)                   |
+| icon_source | text (`default`, `lookup`, `ai`, `manual`) |
+| notes       | text                              |
+| created_at  | timestamp                         |
+| updated_at  | timestamp                         |
+| consumed_at | timestamp, nullable — set by "mark consumed", cleared by "restore" |
+
+### Other tables
+
+| Table | Purpose |
+|---|---|
+| `alert_settings`, `icon_settings` | The single-row settings the app's own Settings screen edits |
+| `icon_name_cache` | Local name → emoji lookup, consulted before falling back to the vision model |
+| `shopping_trips`, `shopping_trip_items` | A receipt photo's checklist; a resolved item links to the `products` row it became |
+| `barcode_lookups` | What a scanned barcode was called (and iconned) last time |
 
 > CaduTrack owns the database `cadutrack` and the schema `cadutrack` inside it,
 > on its own bundled PostgreSQL — `compose.yaml` brings up `cadutrack-db`
@@ -108,7 +129,7 @@ evaluated in `TIMEZONE`, not the host's local zone.
 | Phase 2 | Frontend                     | #14–#19  |
 | Phase 3 | Telegram Alerts              | #20–#23  |
 | Phase 4 | PWA & Deployment             | #24–#29, #37 |
-| Phase 5 | Enhancements / Backlog       | #30–#33, #36 |
+| Phase 5 | Enhancements — ongoing, grew well past the original range (barcode scanning, label/receipt photo reading, consumed-product history, a least-privilege bundled database, a dashboard summary endpoint, auth on mutating endpoints, among others) | Open: #32, #33, #36 |
 
 ---
 
@@ -157,16 +178,20 @@ cp .env.example .env
 # Edit .env with your database URL, Telegram bot token, etc.
 ```
 
-Create the database, run migrations and seed the default categories:
+Create the database — this is the one step nothing here does for you, on
+purpose, see #56 — then run migrations and seed the default categories:
 
 ```bash
-python -m app.db.bootstrap   # creates the database if it does not exist
+createdb cadutrack   # or your own equivalent CREATE DATABASE
+python -m app.db.bootstrap   # waits for Postgres, then verifies the database exists
 alembic upgrade head
 python -m app.seed
 ```
 
-All three are idempotent and run automatically on container start, so this is
-only needed when running the API directly on the host.
+The last three are idempotent and run automatically on container start
+(against the bundled `cadutrack-db`, which creates its own database on first
+boot — see `db/init/`), so this is only needed when running the API directly
+on the host.
 
 > **Running the tests wipes the database they point at.** The integration tests
 > `TRUNCATE` products and categories, so they refuse to run unless `DB_NAME`
@@ -299,16 +324,17 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-That builds and pushes two multi-arch images:
+That builds and pushes three multi-arch images:
 
 | Image | Contents |
 |-------|----------|
 | `ghcr.io/juliomoralesb/cadutrack`     | Frontend — the Vite build served by nginx |
 | `ghcr.io/juliomoralesb/cadutrack-api` | Backend — FastAPI |
+| `ghcr.io/juliomoralesb/cadutrack-db`  | `postgres:16-alpine` plus this service's own first-boot init script — see `db/Dockerfile` and #56 |
 
 Each tag publishes both `{version}` and `latest`.
 
-Both packages are **public**, inherited from the repository's visibility, so the
+All three packages are **public**, inherited from the repository's visibility, so the
 server pulls them anonymously — no `docker login` needed, same as
 `free-games-notifier` and `apollo-server-dashboard`.
 
