@@ -19,7 +19,37 @@ interface BarcodeScannerProps {
  */
 const FORMATS = ['code_128', 'ean_13', 'ean_8', 'upc_e']
 
-const VIDEO_CONSTRAINTS: MediaStreamConstraints = { video: { facingMode: 'environment' } }
+/**
+ * `focusMode` isn't in TS's own MediaTrackConstraintSet (it's a Chrome-only
+ * extension, mainly on Android), so it has to be declared here rather than
+ * just cast away.
+ */
+interface FocusConstraintSet extends MediaTrackConstraintSet {
+  focusMode?: 'continuous' | 'single-shot' | 'manual' | 'none'
+}
+
+const VIDEO_CONSTRAINTS: MediaStreamConstraints = {
+  video: {
+    facingMode: 'environment',
+    // Best-effort: ignored outright on browsers that don't support it
+    // (notably Safari) rather than throwing, since it's requested here as
+    // an `advanced` constraint, not a required one. Where it does work —
+    // mainly Chrome on Android, the common case for a phone-first app —
+    // this is the difference between the camera ever refocusing on a
+    // barcode held close and it staying fixed on whatever it first saw.
+    advanced: [{ focusMode: 'continuous' } as FocusConstraintSet],
+  },
+}
+
+/** Nudge the camera to refocus right now — see the video's own onClick.
+ *  Same best-effort story as the `advanced` constraint above: most tracks
+ *  either don't expose `focusMode` in their capabilities at all, or don't
+ *  support `single-shot`, and this is a silent no-op there. */
+function requestRefocus(track: MediaStreamTrack | null | undefined) {
+  const capabilities = track?.getCapabilities?.() as { focusMode?: string[] } | undefined
+  if (!capabilities?.focusMode?.includes('single-shot')) return
+  void track?.applyConstraints({ advanced: [{ focusMode: 'single-shot' } as FocusConstraintSet] })
+}
 
 /**
  * Live camera barcode scanner — see #30. Prefers the native BarcodeDetector
@@ -30,7 +60,25 @@ const VIDEO_CONSTRAINTS: MediaStreamConstraints = { video: { facingMode: 'enviro
  */
 export function BarcodeScanner({ onDetected, onCancel }: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const trackRef = useRef<MediaStreamTrack | null>(null)
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [focusing, setFocusing] = useState(false)
+
+  useEffect(() => () => {
+    if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current)
+  }, [])
+
+  const handleTapToFocus = () => {
+    requestRefocus(trackRef.current)
+    // Shown regardless of whether the device actually supports refocusing —
+    // same reason a native camera app always shows its focus box on tap:
+    // the user needs to see the tap register even when the hardware can't
+    // act on it.
+    setFocusing(true)
+    if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current)
+    focusTimeoutRef.current = setTimeout(() => setFocusing(false), 500)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -53,6 +101,7 @@ export function BarcodeScanner({ onDetected, onCancel }: BarcodeScannerProps) {
         return
       }
       stopStream = () => stream.getTracks().forEach((track) => track.stop())
+      trackRef.current = stream.getVideoTracks()[0] ?? null
       videoRef.current.srcObject = stream
       await videoRef.current.play()
 
@@ -100,6 +149,7 @@ export function BarcodeScanner({ onDetected, onCancel }: BarcodeScannerProps) {
         return
       }
       stopStream = () => controls.stop()
+      trackRef.current = (videoRef.current.srcObject as MediaStream | null)?.getVideoTracks()[0] ?? null
     }
 
     void (async () => {
@@ -123,6 +173,7 @@ export function BarcodeScanner({ onDetected, onCancel }: BarcodeScannerProps) {
     return () => {
       cancelled = true
       stopStream?.()
+      trackRef.current = null
     }
   }, [onDetected])
 
@@ -135,8 +186,18 @@ export function BarcodeScanner({ onDetected, onCancel }: BarcodeScannerProps) {
           </p>
         ) : (
           <>
-            <video ref={videoRef} className="barcode-scanner__video" muted playsInline aria-label="Vista de la cámara" />
-            <p className="settings__hint">Apunta la cámara al código de barras.</p>
+            <div className="barcode-scanner__viewport">
+              <video
+                ref={videoRef}
+                className="barcode-scanner__video"
+                muted
+                playsInline
+                aria-label="Vista de la cámara"
+                onClick={handleTapToFocus}
+              />
+              {focusing && <span className="barcode-scanner__focus-ring" aria-hidden="true" />}
+            </div>
+            <p className="settings__hint">Apunta la cámara al código de barras. Toca la imagen para enfocar.</p>
           </>
         )}
         <div className="form__actions">

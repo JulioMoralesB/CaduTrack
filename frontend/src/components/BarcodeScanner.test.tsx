@@ -24,9 +24,12 @@ vi.mock('@zxing/library', () => ({
   DecodeHintType: { POSSIBLE_FORMATS: 'possible_formats' },
 }))
 
+const VIDEO_CONSTRAINTS = { video: { facingMode: 'environment', advanced: [{ focusMode: 'continuous' }] } }
+
 function fakeStream() {
   const stop = vi.fn()
-  return { stream: { getTracks: () => [{ stop }] } as unknown as MediaStream, stop }
+  const track = { stop }
+  return { stream: { getTracks: () => [track], getVideoTracks: () => [track] } as unknown as MediaStream, stop }
 }
 
 /** jsdom implements neither — both are exercised by the component whenever
@@ -64,7 +67,7 @@ describe('BarcodeScanner, native BarcodeDetector available', () => {
     render(<BarcodeScanner onDetected={onDetected} onCancel={vi.fn()} />)
 
     await waitFor(() => expect(onDetected).toHaveBeenCalledWith('5449000000996'))
-    expect(getUserMedia).toHaveBeenCalledWith({ video: { facingMode: 'environment' } })
+    expect(getUserMedia).toHaveBeenCalledWith(VIDEO_CONSTRAINTS)
     expect(stop).toHaveBeenCalled()
   })
 
@@ -88,6 +91,46 @@ describe('BarcodeScanner, native BarcodeDetector available', () => {
     render(<BarcodeScanner onDetected={vi.fn()} onCancel={vi.fn()} />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo abrir la cámara.')
+  })
+
+  it('requests a refocus when the video is tapped and the track supports it', async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined)
+    const track = {
+      stop: vi.fn(),
+      getCapabilities: () => ({ focusMode: ['continuous', 'single-shot'] }),
+      applyConstraints,
+    }
+    const stream = { getTracks: () => [track], getVideoTracks: () => [track] } as unknown as MediaStream
+    const getUserMedia = vi.fn().mockResolvedValue(stream)
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true })
+    window.BarcodeDetector = vi.fn(function FakeBarcodeDetector() {
+      return { detect: vi.fn().mockResolvedValue([]) }
+    }) as unknown as typeof BarcodeDetector
+
+    render(<BarcodeScanner onDetected={vi.fn()} onCancel={vi.fn()} />)
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByLabelText('Vista de la cámara'))
+
+    expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ focusMode: 'single-shot' }] })
+  })
+
+  it('does nothing on tap when the track has no manual focus mode to request', async () => {
+    const applyConstraints = vi.fn()
+    const track = { stop: vi.fn(), getCapabilities: () => ({ focusMode: ['continuous'] }), applyConstraints }
+    const stream = { getTracks: () => [track], getVideoTracks: () => [track] } as unknown as MediaStream
+    const getUserMedia = vi.fn().mockResolvedValue(stream)
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true })
+    window.BarcodeDetector = vi.fn(function FakeBarcodeDetector() {
+      return { detect: vi.fn().mockResolvedValue([]) }
+    }) as unknown as typeof BarcodeDetector
+
+    render(<BarcodeScanner onDetected={vi.fn()} onCancel={vi.fn()} />)
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByLabelText('Vista de la cámara'))
+
+    expect(applyConstraints).not.toHaveBeenCalled()
   })
 
   it('notifies the caller on cancel, and releases the camera once unmounted', async () => {
@@ -129,11 +172,7 @@ describe('BarcodeScanner, no native BarcodeDetector', () => {
     render(<BarcodeScanner onDetected={onDetected} onCancel={vi.fn()} />)
 
     await waitFor(() => expect(onDetected).toHaveBeenCalledWith('2520157108483'))
-    expect(decodeFromConstraints).toHaveBeenCalledWith(
-      { video: { facingMode: 'environment' } },
-      expect.anything(),
-      expect.any(Function),
-    )
+    expect(decodeFromConstraints).toHaveBeenCalledWith(VIDEO_CONSTRAINTS, expect.anything(), expect.any(Function))
   })
 
   it('ignores a callback fired with no result — a normal miss on one frame', async () => {
