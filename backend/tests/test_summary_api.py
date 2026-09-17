@@ -1,4 +1,4 @@
-"""Dashboard summary endpoint tests — see #93 and ADR 012."""
+"""Dashboard summary endpoint tests — see #93, #130, and ADR 012."""
 
 from datetime import date, timedelta
 
@@ -70,6 +70,47 @@ def test_counts_expired_and_expiring_soon_separately(api_client, summary_key):
     assert body["expiring_soon"] == 1
 
 
+def test_expired_products_lists_every_one_of_them(api_client, summary_key):
+    today = date.today()
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(today - timedelta(days=1))))
+    api_client.post("/products", json=_product(name="Queso", expires_at=str(today - timedelta(days=5))))
+    api_client.post("/products", json=_product(name="Fresco", expires_at=str(today + timedelta(days=30))))
+
+    body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
+
+    assert {(item["name"], item["expires_at"]) for item in body["expired_products"]} == {
+        ("Leche", str(today - timedelta(days=1))),
+        ("Queso", str(today - timedelta(days=5))),
+    }
+
+
+def test_next_never_names_an_already_expired_product(api_client, summary_key):
+    """The bug report this fixes, #130: with several expired products and
+    one expiring soon, next used to only ever name the expired ones — their
+    own (past) date always won the "soonest" comparison outright, so the
+    genuinely-soon-to-expire product never got named at all."""
+    today = date.today()
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(today - timedelta(days=1))))
+    api_client.post("/products", json=_product(name="Queso", expires_at=str(today - timedelta(days=5))))
+    api_client.post("/products", json=_product(name="Jamón", expires_at=str(today - timedelta(days=2))))
+    api_client.post("/products", json=_product(name="Yogurt", expires_at=str(today + timedelta(days=3))))
+
+    body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
+
+    assert body["expired"] == 3
+    assert body["next"] == [{"name": "Yogurt", "expires_at": str(today + timedelta(days=3))}]
+
+
+def test_next_is_empty_when_every_active_product_has_already_expired(api_client, summary_key):
+    today = date.today()
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(today - timedelta(days=1))))
+
+    body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
+
+    assert body["expired"] == 1
+    assert body["next"] == []
+
+
 def test_next_names_the_single_most_urgent_product_even_if_only_fresh(api_client, summary_key):
     """No expired or expiring_soon product exists — next must still name
     the soonest one, not report empty just because nothing is urgent yet."""
@@ -106,7 +147,7 @@ def test_next_lists_every_product_tied_for_soonest(api_client, summary_key):
 def test_next_is_empty_when_there_are_no_active_products(api_client, summary_key):
     body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
 
-    assert body == {"expired": 0, "expiring_soon": 0, "next": []}
+    assert body == {"expired": 0, "expired_products": [], "expiring_soon": 0, "next": []}
 
 
 def test_a_consumed_product_is_excluded_entirely(api_client, summary_key):
@@ -118,17 +159,20 @@ def test_a_consumed_product_is_excluded_entirely(api_client, summary_key):
 
     body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
 
-    assert body == {"expired": 0, "expiring_soon": 0, "next": []}
+    assert body == {"expired": 0, "expired_products": [], "expiring_soon": 0, "next": []}
 
 
 def test_the_response_shape_is_exactly_the_documented_contract(api_client, summary_key):
     """A breaking change here must fail this test, not surprise a consumer
     this service does not know exists — see ADR 012."""
     today = date.today()
-    api_client.post("/products", json=_product(name="Nopalitos", expires_at=str(today)))
+    api_client.post("/products", json=_product(name="Nopalitos", expires_at=str(today - timedelta(days=1))))
+    api_client.post("/products", json=_product(name="Yogurt", expires_at=str(today + timedelta(days=1))))
 
     body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
 
-    assert set(body.keys()) == {"expired", "expiring_soon", "next"}
+    assert set(body.keys()) == {"expired", "expired_products", "expiring_soon", "next"}
+    assert isinstance(body["expired_products"], list)
+    assert set(body["expired_products"][0].keys()) == {"name", "expires_at"}
     assert isinstance(body["next"], list)
     assert set(body["next"][0].keys()) == {"name", "expires_at"}

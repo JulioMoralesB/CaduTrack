@@ -13,6 +13,7 @@ what happens by default when nothing here catches the exception. See ADR
 """
 
 import logging
+from datetime import date
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
@@ -55,21 +56,39 @@ def get_summary(db: Session = Depends(get_db)) -> SummaryResponse:
     reference = today()
     expired = 0
     expiring_soon = 0
-    for _name, expires_at in rows:
+    expired_products: list[SummaryNextProduct] = []
+    not_yet_expired: list[tuple[str, date]] = []
+    for name, expires_at in rows:
         bucket = expiry_status(days_until_expiry(expires_at, reference))
         if bucket == ExpiryStatus.EXPIRED:
             expired += 1
-        elif bucket == ExpiryStatus.EXPIRING_SOON:
-            expiring_soon += 1
+            expired_products.append(SummaryNextProduct(name=name, expires_at=expires_at))
+        else:
+            if bucket == ExpiryStatus.EXPIRING_SOON:
+                expiring_soon += 1
+            not_yet_expired.append((name, expires_at))
 
-    # rows is already sorted soonest-first, so every row sharing the first
-    # row's own date — not just the first row itself — is equally the most
-    # urgent thing to name. A same-day tie is the common case, not an edge
-    # case: a shopping trip usually adds several products at once.
-    next_products = [
-        SummaryNextProduct(name=name, expires_at=expires_at)
-        for name, expires_at in rows
-        if expires_at == rows[0].expires_at
-    ]
+    # not_yet_expired keeps rows' own soonest-first order, so every entry
+    # sharing the first one's own date — not just the first itself — is
+    # equally the most urgent thing left to name. A same-day tie is the
+    # common case, not an edge case: a shopping trip usually adds several
+    # products at once. An already-expired product never reaches this list
+    # at all — see #130: that used to mean the single earliest date always
+    # won here even when it was long gone, and next never moved on to
+    # naming anything else until someone dealt with it.
+    next_products = (
+        [
+            SummaryNextProduct(name=name, expires_at=expires_at)
+            for name, expires_at in not_yet_expired
+            if expires_at == not_yet_expired[0][1]
+        ]
+        if not_yet_expired
+        else []
+    )
 
-    return SummaryResponse(expired=expired, expiring_soon=expiring_soon, next=next_products)
+    return SummaryResponse(
+        expired=expired,
+        expired_products=expired_products,
+        expiring_soon=expiring_soon,
+        next=next_products,
+    )
