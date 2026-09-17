@@ -295,10 +295,13 @@ get a `401` — there is no unauthenticated mode for this one.
 ```json
 {
   "expired": 2,
-  "expiring_soon": 3,
+  "expired_products": [
+    { "name": "Leche entera", "expires_at": "2026-08-30" },
+    { "name": "Queso Oaxaca", "expires_at": "2026-08-31" }
+  ],
+  "expiring_soon": 1,
   "next": [
-    { "name": "Nopalitos", "expires_at": "2026-09-01" },
-    { "name": "Yogurt griego", "expires_at": "2026-09-01" }
+    { "name": "Yogurt griego", "expires_at": "2026-09-05" }
   ]
 }
 ```
@@ -306,8 +309,14 @@ get a `401` — there is no unauthenticated mode for this one.
 | Field | Meaning |
 |---|---|
 | `expired` | Active products already past `expires_at` |
+| `expired_products` | Every one of them, sorted soonest (most overdue) first. `[]` when `expired` is 0 |
 | `expiring_soon` | Active products expiring within 7 days, today included |
-| `next` | Every active product tied for soonest `expires_at`, regardless of which bucket that date falls in — a same-day tie is common, not an edge case. `[]` when nothing is active |
+| `next` | Every active, **not-yet-expired** product tied for soonest `expires_at` — an already-expired product never appears here, `expired_products` above is the only place that names one. A same-day tie is common, not an edge case. `[]` when nothing active is left that hasn't already expired |
+
+`next` narrowed to exclude expired products in #130 — before that, an
+already-expired product's own (past) date always won the "soonest"
+comparison outright, so `next` got stuck repeating it forever instead of
+ever naming what was actually coming up.
 
 A database problem is a `500`, never a `0` that reads as good news — see
 `app/expiry.py` for the shared thresholds this reuses rather than

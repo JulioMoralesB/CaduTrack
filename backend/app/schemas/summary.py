@@ -11,9 +11,8 @@ from pydantic import BaseModel
 
 
 class SummaryNextProduct(BaseModel):
-    """One of the most urgent active products, regardless of its own status —
-    still worth naming even when it is merely fresh and nothing is actually
-    expiring soon."""
+    """One active product's name and expiry date — the shape both
+    `expired_products` and `next` below share."""
 
     name: str
     expires_at: date
@@ -21,9 +20,17 @@ class SummaryNextProduct(BaseModel):
 
 class SummaryResponse(BaseModel):
     expired: int
+    # Every active product already past its own expires_at — `expired`
+    # above says how many, this says which ones. Sorted soonest (most
+    # overdue) first. See #130.
+    expired_products: list[SummaryNextProduct]
     expiring_soon: int
-    # Every active product sharing the soonest expires_at — a same-day tie
-    # is common (a shopping trip usually adds several at once), and naming
-    # only one of them hid the rest from the one field meant to say what's
-    # most urgent. Empty only when there are no active products at all.
+    # Every active, NOT-yet-expired product sharing the soonest expires_at —
+    # what to use before it joins expired_products, never what is already
+    # there. A same-day tie is common (a shopping trip usually adds several
+    # at once), and naming only one of them hid the rest from the one field
+    # meant to say what's next. Empty when nothing active is left that
+    # hasn't already expired — see #130: an already-expired product used to
+    # crowd this out and never let go once nobody dealt with it, so
+    # expired_products above is now the only place that ever names one.
     next: list[SummaryNextProduct]
