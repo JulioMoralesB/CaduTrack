@@ -15,24 +15,9 @@ vi.mock('@/services/visionService', () => ({
 }))
 
 vi.mock('@/services/barcodesService', () => ({
+  scanBarcodePhoto: vi.fn(),
   lookupBarcode: vi.fn(),
   rememberBarcode: vi.fn(),
-}))
-
-// Camera access and BarcodeDetector/zxing have their own coverage in
-// BarcodeScanner.test.tsx — here only the detected value matters, so the
-// component is replaced with two buttons standing in for what it reports.
-vi.mock('@/components/BarcodeScanner', () => ({
-  BarcodeScanner: ({ onDetected, onCancel }: { onDetected: (raw: string) => void; onCancel: () => void }) => (
-    <div>
-      <button type="button" onClick={() => onDetected('5449000000996')}>
-        fake-detect
-      </button>
-      <button type="button" onClick={onCancel}>
-        fake-cancel-scan
-      </button>
-    </div>
-  ),
 }))
 
 const products = await import('@/services/productsService')
@@ -41,6 +26,7 @@ const barcodes = await import('@/services/barcodesService')
 const mockedCreate = vi.mocked(products.createProduct)
 const mockedAdjustQuantity = vi.mocked(products.adjustProductQuantity)
 const mockedExtract = vi.mocked(vision.extractLabel)
+const mockedScanBarcodePhoto = vi.mocked(barcodes.scanBarcodePhoto)
 const mockedLookupBarcode = vi.mocked(barcodes.lookupBarcode)
 const mockedRememberBarcode = vi.mocked(barcodes.rememberBarcode)
 
@@ -59,9 +45,13 @@ function selectPhoto() {
   })
 }
 
+/** Picks a barcode photo — scanBarcodePhoto's own default resolution
+ *  (see the describe block's beforeEach) decodes it as '5449000000996'. */
 function scanBarcode() {
-  fireEvent.click(screen.getByRole('button', { name: 'Escanear código de barras' }))
-  fireEvent.click(screen.getByRole('button', { name: 'fake-detect' }))
+  const file = new File(['fake'], 'barcode.png', { type: 'image/png' })
+  fireEvent.change(screen.getByLabelText('Foto del código de barras (opcional)'), {
+    target: { files: [file] },
+  })
 }
 
 function fakeProduct(overrides: Partial<Product> = {}): Product {
@@ -291,15 +281,38 @@ describe('ProductForm barcode scan', () => {
     // test that never overrides it would otherwise crash on a mock, not on
     // anything the component itself does wrong.
     mockedRememberBarcode.mockResolvedValue(undefined)
+    // scanBarcode()'s own default decode — see its own comment. Tests that
+    // care about the decode step itself override this first.
+    mockedScanBarcodePhoto.mockResolvedValue({ raw: '5449000000996' })
   })
 
-  it('offers the scan button when creating, not when editing', () => {
+  it('offers the scan field when creating, not when editing', () => {
     const { unmount } = render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'Escanear código de barras' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Foto del código de barras (opcional)')).toBeInTheDocument()
     unmount()
 
     render(<ProductForm product={fakeProduct()} categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: 'Escanear código de barras' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Foto del código de barras (opcional)')).not.toBeInTheDocument()
+  })
+
+  it('decodes the photo, then looks up what it found', async () => {
+    mockedScanBarcodePhoto.mockResolvedValue({ raw: '2520157108483' })
+    mockedLookupBarcode.mockResolvedValue(barcodeLookupResult({ item_code: '2520157108483' }))
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    scanBarcode()
+
+    await waitFor(() => expect(mockedLookupBarcode).toHaveBeenCalledWith('2520157108483'))
+  })
+
+  it('shows the decode failure inline without ever calling lookup', async () => {
+    mockedScanBarcodePhoto.mockRejectedValue(new Error('nope'))
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    scanBarcode()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(mockedLookupBarcode).not.toHaveBeenCalled()
   })
 
   it('pre-fills what the lookup returned, and never touches the expiry date', async () => {
@@ -352,17 +365,6 @@ describe('ProductForm barcode scan', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Código 5449000000996: Ocurrió un error inesperado.')
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
     expect(screen.getByLabelText('Nombre')).toHaveValue('Huevos')
-  })
-
-  it('closes on cancel without touching the form', () => {
-    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Escanear código de barras' }))
-    fireEvent.click(screen.getByRole('button', { name: 'fake-cancel-scan' }))
-
-    expect(screen.queryByRole('button', { name: 'fake-cancel-scan' })).not.toBeInTheDocument()
-    expect(mockedLookupBarcode).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Nombre')).toHaveValue('')
   })
 
   it('remembers the scanned code once the product it fed is actually saved', async () => {

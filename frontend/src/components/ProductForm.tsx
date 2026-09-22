@@ -1,13 +1,12 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 
-import { BarcodeScanner } from '@/components/BarcodeScanner'
 import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
 import { findDuplicateToday } from '@/duplicateCheck'
 import { LOCATION_LABELS, quantityLabel } from '@/labels'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
-import { lookupBarcode, rememberBarcode } from '@/services/barcodesService'
+import { lookupBarcode, rememberBarcode, scanBarcodePhoto } from '@/services/barcodesService'
 import { adjustProductQuantity, createProduct, replaceProduct } from '@/services/productsService'
 import type { Category, Location, Product, ProductPayload } from '@/services/types'
 import { extractLabel } from '@/services/visionService'
@@ -73,6 +72,9 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
   const [scanError, setScanError] = useState<string | null>(null)
   const [scanHint, setScanHint] = useState<string | null>(null)
 
+  // True while the barcode photo itself is being decoded — see #132.
+  // barcodeLookupPending, below, is the separate phase after that: looking
+  // up whatever the decode returned.
   const [barcodeScanning, setBarcodeScanning] = useState(false)
   const [barcodeLookupPending, setBarcodeLookupPending] = useState(false)
   const [barcodeError, setBarcodeError] = useState<string | null>(null)
@@ -151,13 +153,38 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
   }
 
   /**
+   * Decode a barcode photo, then feed the result into the same lookup
+   * handleBarcodeDetected already does — see #132. Two sequential phases,
+   * same reasoning as handleScan's own single phase: decode first
+   * (barcodeScanning), then look up whatever it found (barcodeLookupPending).
+   */
+  const handleBarcodeScan = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    setBarcodeScanning(true)
+    setBarcodeError(null)
+    setBarcodeHint(null)
+    void (async () => {
+      try {
+        const { raw } = await scanBarcodePhoto(await downscaleImage(file))
+        handleBarcodeDetected(raw)
+      } catch (caught) {
+        setBarcodeError(toErrorMessage(caught))
+      } finally {
+        setBarcodeScanning(false)
+      }
+    })()
+  }
+
+  /**
    * A barcode never carries a name by itself — only what a previous
    * remember() or Open Food Facts said the code was, plus whatever a
    * GS1-128 label's own (310n) field reads as weight. Same merge rule as
    * handleScan: only fields the lookup actually returned are overwritten.
    */
   const handleBarcodeDetected = (raw: string) => {
-    setBarcodeScanning(false)
     setBarcodeLookupPending(true)
     setBarcodeError(null)
     setBarcodeHint(null)
@@ -295,7 +322,7 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
                 accept="image/*"
                 capture="environment"
                 onChange={handleScan}
-                disabled={scanning || barcodeLookupPending}
+                disabled={scanning || barcodeScanning || barcodeLookupPending}
               />
               {scanning && <p className="settings__hint">Leyendo etiqueta…</p>}
               {scanError && (
@@ -308,23 +335,22 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
 
             {/* A barcode never carries an expiry date — see #30 — so this
                 only ever fills in name/quantity/unit, same partial-
-                overwrite rule as the photo scan above. A separate
-                affordance rather than folded into it: a live camera scan
-                and a photo upload are different enough interactions to
-                need their own button and status. */}
+                overwrite rule as the photo scan above. A native-camera
+                photo, same as the label field above it — see #132: the old
+                live in-browser video scan was unreliable across devices and
+                lighting, the same problem the label field never had because
+                it always worked this way. */}
             <div className="form__field">
-              <span>Código de barras (opcional)</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setBarcodeError(null)
-                  setBarcodeHint(null)
-                  setBarcodeScanning(true)
-                }}
-                disabled={scanning || barcodeLookupPending}
-              >
-                Escanear código de barras
-              </button>
+              <label htmlFor="product-barcode-scan">Foto del código de barras (opcional)</label>
+              <input
+                id="product-barcode-scan"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleBarcodeScan}
+                disabled={scanning || barcodeScanning || barcodeLookupPending}
+              />
+              {barcodeScanning && <p className="settings__hint">Leyendo código de barras…</p>}
               {barcodeLookupPending && <p className="settings__hint">Buscando producto…</p>}
               {barcodeError && (
                 <p className="form__error" role="alert">
@@ -506,9 +532,6 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
           </div>
         )}
       </form>
-      {barcodeScanning && (
-        <BarcodeScanner onDetected={handleBarcodeDetected} onCancel={() => setBarcodeScanning(false)} />
-      )}
     </Modal>
   )
 }

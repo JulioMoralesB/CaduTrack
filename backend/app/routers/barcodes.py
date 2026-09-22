@@ -1,20 +1,59 @@
-"""Barcode lookup endpoints — see #30."""
+"""Barcode lookup endpoints — see #30 and #132."""
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.barcode_parser import is_restricted_circulation, parse_barcode
+from app.barcode_photo import decode_barcode_photo
 from app.db.session import get_db
 from app.models import BarcodeLookup
 from app.off_client import lookup_product_name
-from app.schemas.barcode import BarcodeLookupResult, BarcodeRememberPayload, BarcodeScanPayload
+from app.schemas.barcode import (
+    BarcodeLookupResult,
+    BarcodeRememberPayload,
+    BarcodeScanPayload,
+    BarcodeScanPhotoResult,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/barcodes", tags=["barcodes"])
+
+# Same ceiling and reasoning as /vision/label: a phone photo is a few MB at
+# most, this is a generous bound against a mistake or abuse, not a limit
+# meant to bind on a real photo.
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+@router.post("/scan-photo", response_model=BarcodeScanPhotoResult)
+async def scan_barcode_photo(image: UploadFile = File(...)) -> BarcodeScanPhotoResult:
+    """Decode a barcode from a photo taken with the phone's own camera —
+    see #132, replacing the old live in-browser video scan.
+
+    Side-effect free, same contract as /vision/label and /barcodes/lookup:
+    decoding is not looking anything up yet — the client still calls
+    /barcodes/lookup with the raw value this returns, exactly as it did
+    with a live scanner's own detected value.
+    """
+    contents = await image.read()
+    if not contents:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="La imagen está vacía")
+    if len(contents) > _MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="La imagen es demasiado grande"
+        )
+
+    raw = decode_barcode_photo(contents)
+    if raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No se detectó ningún código de barras en la foto. Intenta de nuevo, más cerca y con buena luz.",
+        )
+
+    return BarcodeScanPhotoResult(raw=raw)
 
 
 @router.post("/lookup", response_model=BarcodeLookupResult)
