@@ -2,6 +2,24 @@ import { api } from '@/services/api'
 import type { BarcodeLookupResult } from '@/services/types'
 
 /**
+ * Decode a barcode from a photo taken with the phone's own camera — see
+ * #132 and POST /barcodes/scan-photo. Replaces the old live in-browser
+ * video scan; the raw value this returns is handed to lookupBarcode below
+ * exactly as a live scanner's own detected value used to be.
+ *
+ * Not retried, same reasoning as extractLabel: the user can just take the
+ * photo again, and a scan happens far more often than it fails.
+ */
+export async function scanBarcodePhoto(image: Blob): Promise<{ raw: string }> {
+  const form = new FormData()
+  form.append('image', image, 'barcode.jpg')
+  const { data } = await api.post<{ raw: string }>('/barcodes/scan-photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+/**
  * Resolve a scanned code — see #30 and POST /barcodes/lookup. Side-effect
  * free, same contract as extractLabel: nothing is saved, the result is
  * only meant to pre-fill the product form for the user to confirm.

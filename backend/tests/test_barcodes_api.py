@@ -4,6 +4,8 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
+_IMAGE = b"\x89PNG\r\n\x1a\n fake bytes, never actually decoded in these tests"
+
 
 def test_a_restricted_prefix_code_never_calls_open_food_facts(api_client, mocker):
     off = mocker.patch("app.routers.barcodes.lookup_product_name")
@@ -85,6 +87,51 @@ def test_remembering_again_without_an_icon_clears_the_previous_icon(api_client):
     response = api_client.post("/barcodes/lookup", json={"code": "123"})
 
     assert response.json()["icon"] is None
+
+
+def test_scan_photo_returns_the_decoded_value(client, mocker):
+    """No DB needed for this one — decode_barcode_photo.py's own tests
+    (test_barcode_photo.py) own proving the real decode; this only proves
+    the endpoint wires that value through."""
+    mocker.patch("app.routers.barcodes.decode_barcode_photo", return_value="5449000000996")
+
+    response = client.post("/barcodes/scan-photo", files={"image": ("barcode.png", _IMAGE, "image/png")})
+
+    assert response.status_code == 200
+    assert response.json() == {"raw": "5449000000996"}
+
+
+def test_scan_photo_reports_when_nothing_was_decoded(client, mocker):
+    mocker.patch("app.routers.barcodes.decode_barcode_photo", return_value=None)
+
+    response = client.post("/barcodes/scan-photo", files={"image": ("barcode.png", _IMAGE, "image/png")})
+
+    assert response.status_code == 422
+
+
+def test_scan_photo_rejects_an_empty_file_without_decoding(client, mocker):
+    decode = mocker.patch("app.routers.barcodes.decode_barcode_photo")
+
+    response = client.post("/barcodes/scan-photo", files={"image": ("barcode.png", b"", "image/png")})
+
+    assert response.status_code == 422
+    decode.assert_not_called()
+
+
+def test_scan_photo_rejects_an_oversized_file_without_decoding(client, mocker):
+    decode = mocker.patch("app.routers.barcodes.decode_barcode_photo")
+    oversized = b"x" * (10 * 1024 * 1024 + 1)
+
+    response = client.post("/barcodes/scan-photo", files={"image": ("barcode.png", oversized, "image/png")})
+
+    assert response.status_code == 413
+    decode.assert_not_called()
+
+
+def test_scan_photo_rejects_a_missing_file(client):
+    response = client.post("/barcodes/scan-photo")
+
+    assert response.status_code == 422
 
 
 def test_remembering_actually_commits_not_just_the_in_session_object(api_client, db_session, mocker):

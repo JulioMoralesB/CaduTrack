@@ -12,9 +12,12 @@ WORKDIR /app
 
 # Run as a non-root user, matching apollo-server-dashboard's backend image.
 # gosu lets the entrypoint drop privileges after any root-only setup.
+# libzbar0 is pyzbar's own runtime dependency — see #132: it loads the zbar
+# shared library via ctypes at import time, so pip installing pyzbar alone
+# is not enough, unlike a normal Python package.
 RUN groupadd --system --gid 1000 appuser \
     && useradd --system --no-create-home --shell /bin/false --uid 1000 --gid 1000 appuser \
-    && apt-get update && apt-get install -y --no-install-recommends gosu \
+    && apt-get update && apt-get install -y --no-install-recommends gosu libzbar0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

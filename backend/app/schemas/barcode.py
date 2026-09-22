@@ -12,6 +12,15 @@ class BarcodeScanPayload(BaseModel):
     code: str = Field(min_length=1, max_length=128)
 
 
+class BarcodeScanPhotoResult(BaseModel):
+    """The raw value decoded from a barcode photo — see #132. Same shape
+    the old live scanner's own detected value had, so the client hands
+    this straight to POST /barcodes/lookup exactly as before; only how the
+    raw value is obtained changed."""
+
+    raw: str
+
+
 class BarcodeLookupResult(BaseModel):
     """What a scanned code resolved to. Every field but item_code may be
     null when nothing could be determined with confidence — never a guess,
