@@ -6,7 +6,7 @@ import { findDuplicateToday } from '@/duplicateCheck'
 import { quantityLabel } from '@/labels'
 import { toErrorMessage } from '@/services/api'
 import { dropTripItem, resolveTripItem } from '@/services/tripsService'
-import type { Category, Product, ShoppingTrip, ShoppingTripItem } from '@/services/types'
+import type { Category, Product, ProductNameSuggestion, ShoppingTrip, ShoppingTripItem } from '@/services/types'
 
 interface ReceiptTripDialogProps {
   trip: ShoppingTrip
@@ -15,6 +15,10 @@ interface ReceiptTripDialogProps {
    *  ProductForm and used here too, to flag a checklist line that looks
    *  like it was already added today — see #108. */
   products: Product[]
+  /** Threaded straight through to this dialog's own ProductForm — see
+   *  #133. A receipt line becoming a product is exactly the same "create"
+   *  moment ProductForm's own name field already covers. */
+  nameSuggestions?: ProductNameSuggestion[]
   onClose: () => void
   /** Called whenever an item is dropped or resolved, so the active product
    *  list and the "current trip" banner stay in sync without a second
@@ -43,7 +47,14 @@ function itemState(item: ShoppingTripItem): ItemState {
  * because #83's own photo-of-the-label scan is exactly what a user reaches
  * for here, and that only makes sense pointed at a single product.
  */
-export function ReceiptTripDialog({ trip, categories, products, onClose, onTripChanged }: ReceiptTripDialogProps) {
+export function ReceiptTripDialog({
+  trip,
+  categories,
+  products,
+  nameSuggestions,
+  onClose,
+  onTripChanged,
+}: ReceiptTripDialogProps) {
   const [items, setItems] = useState(trip.items)
   // Only the pending items need a tick; a dropped or added item does not
   // come back to this map even if a later action revisits it. A line that
@@ -189,6 +200,7 @@ export function ReceiptTripDialog({ trip, categories, products, onClose, onTripC
         key={current.id}
         categories={categories}
         products={products}
+        nameSuggestions={nameSuggestions}
         prefill={{ name: current.name, quantity: current.quantity }}
         title={remaining === 1 ? 'Agregar producto' : `Agregar producto (quedan ${remaining})`}
         onSaved={handleItemSaved}

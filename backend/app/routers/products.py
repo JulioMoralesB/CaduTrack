@@ -16,6 +16,7 @@ from app.schemas.product import (
     IconReassignmentResult,
     ProductCreate,
     ProductIconUpdate,
+    ProductNameSuggestion,
     ProductQuantityDelta,
     ProductRead,
     ProductUpdate,
@@ -100,6 +101,35 @@ def list_consumed_products(db: Session = Depends(get_db)) -> list[Product]:
         .order_by(Product.consumed_at.desc())
     )
     return list(db.execute(statement).scalars())
+
+
+@router.get("/name-suggestions", response_model=list[ProductNameSuggestion])
+def list_name_suggestions(db: Session = Depends(get_db)) -> list[ProductNameSuggestion]:
+    """One row per distinct product name ever used — active or consumed,
+    see #133: history matters here precisely because the common case is
+    "I ran out of this and I'm buying it again" — from the most recently
+    created row with that name, so a repeat purchase can reuse its
+    category and location instead of the form's bare defaults.
+
+    Matched case/whitespace-insensitively so "Leche" and "leche " group
+    together, same normalization findDuplicateToday's own frontend check
+    already uses — but the name returned is the most recent row's own
+    original casing, not a normalized form, since this also feeds the name
+    field's own autocomplete.
+
+    Declared ahead of GET /{product_id} for the same routing reason
+    /history is.
+    """
+    normalized_name = func.lower(func.trim(Product.name))
+    statement = (
+        select(Product.name, Product.category_id, Product.location)
+        .distinct(normalized_name)
+        .order_by(normalized_name, Product.created_at.desc())
+    )
+    return [
+        ProductNameSuggestion(name=name, category_id=category_id, location=location)
+        for name, category_id, location in db.execute(statement).all()
+    ]
 
 
 @router.get("/{product_id}", response_model=ProductRead)

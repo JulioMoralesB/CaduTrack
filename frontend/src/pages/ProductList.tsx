@@ -18,6 +18,7 @@ import {
   type SortKey,
 } from '@/filters'
 import { useCategories } from '@/hooks/useCategories'
+import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
 import { apiUrl, toErrorMessage } from '@/services/api'
 import { deleteProduct } from '@/services/productsService'
@@ -38,6 +39,7 @@ type Dialog =
 export function ProductList() {
   const { products, loading, error, unreachable, cachedAt, reload, replaceProduct, removeProduct } = useProducts()
   const categories = useCategories()
+  const nameSuggestions = useNameSuggestions()
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' })
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -292,7 +294,13 @@ export function ProductList() {
       )}
 
       {dialog.kind === 'create' && (
-        <ProductForm categories={categories} products={products} onSaved={handleSaved} onCancel={close} />
+        <ProductForm
+          categories={categories}
+          products={products}
+          nameSuggestions={nameSuggestions}
+          onSaved={handleSaved}
+          onCancel={close}
+        />
       )}
 
       {dialog.kind === 'edit' && (
@@ -314,6 +322,7 @@ export function ProductList() {
           trip={currentTrip}
           categories={categories}
           products={products}
+          nameSuggestions={nameSuggestions}
           onClose={close}
           onTripChanged={handleTripChanged}
         />
