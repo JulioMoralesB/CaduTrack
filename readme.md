@@ -10,6 +10,8 @@ A food expiry tracker app to register purchased food items, their expiration dat
 - 📷 Read a product's name, expiry date and weight straight from a photo of
   its label, or import a whole shopping trip from a photo of the receipt —
   both read locally by Ollama, nothing leaves the network
+- 🗂️ Queue several label photos at once and keep using the app while
+  they're read in the background, then add each one from a checklist
 - 🔖 Scan a barcode (GS1-128 or plain EAN-13) to identify a product; a
   scanned code remembers what it was called last time
 - ⚠️ Warned about a likely duplicate — same name, same day — before it's
@@ -99,6 +101,7 @@ cadutrack/
 | `alert_settings`, `icon_settings` | The single-row settings the app's own Settings screen edits |
 | `icon_name_cache` | Local name → emoji lookup, consulted before falling back to the vision model |
 | `shopping_trips`, `shopping_trip_items` | A receipt photo's checklist; a resolved item links to the `products` row it became |
+| `label_scans` | Queued label photos, read in the background; the photo is kept only until the scan is added or dropped |
 | `barcode_lookups` | What a scanned barcode was called (and iconned) last time |
 | `receipt_name_lookup` | What a receipt line's raw printed text was named last time it resolved into a product |
 

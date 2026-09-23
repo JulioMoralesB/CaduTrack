@@ -1,4 +1,5 @@
 import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -7,8 +8,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.access_auth import RequireAuthOnMutations
 from app.config import settings
+from app.label_queue import process_pending
 from app.logging_config import setup_logging
-from app.routers import alerts, barcodes, categories, health, products, reauth, summary, trips, vision
+from app.routers import (
+    alerts,
+    barcodes,
+    categories,
+    health,
+    label_scans,
+    products,
+    reauth,
+    summary,
+    trips,
+    vision,
+)
 from app.routers import settings as settings_router
 from app.scheduler import shutdown_scheduler, start_scheduler
 
@@ -24,8 +37,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Run the daily alert job for as long as the API is up."""
+    """Run the daily alert job for as long as the API is up, and finish
+    reading any label photos a previous run left queued."""
     start_scheduler()
+    threading.Thread(target=process_pending, name="label-queue-resume", daemon=True).start()
     try:
         yield
     finally:
@@ -58,6 +73,7 @@ app.include_router(settings_router.router)
 app.include_router(vision.router)
 app.include_router(reauth.router)
 app.include_router(trips.router)
+app.include_router(label_scans.router)
 app.include_router(barcodes.router)
 app.include_router(summary.router)
 

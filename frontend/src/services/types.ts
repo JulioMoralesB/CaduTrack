@@ -129,6 +129,25 @@ export interface LabelExtraction {
   unit: string | null
 }
 
+/** Where a queued label photo's own reading stands — see #134. */
+export type LabelScanStatus = 'pending' | 'read' | 'failed'
+
+/** One queued label photo, read in the background — see #134 and
+ *  POST /label-scans. The read fields match LabelExtraction exactly. */
+export interface LabelScan {
+  id: number
+  created_at: string
+  status: LabelScanStatus
+  name: string | null
+  expires_at: string | null
+  quantity: string | null
+  unit: string | null
+  /** Null while still on the checklist; see ShoppingTripItem's own
+   *  resolved_at/product_id for the same convention. */
+  resolved_at: string | null
+  product_id: number | null
+}
+
 /** One line read from a receipt photo — see #84 and POST /trips/receipt. */
 export interface ShoppingTripItem {
   id: number

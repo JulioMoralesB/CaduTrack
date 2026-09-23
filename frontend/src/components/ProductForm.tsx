@@ -15,11 +15,11 @@ import { extractLabel } from '@/services/visionService'
 interface ProductFormProps {
   /** Omit to create; pass a product to edit it. */
   product?: Product
-  /** Seeds name and quantity when creating from a shopping trip item's own
-   *  reading of the receipt — see #84. Ignored when editing, and only ever
-   *  a starting point: both fields stay fully editable, same as a photo
-   *  scan's own prefill. */
-  prefill?: { name: string; quantity: string }
+  /** Seeds the form when creating from something already read — a receipt
+   *  line (#84) or a queued label photo (#134). Ignored when editing, and
+   *  only ever a starting point: every field stays fully editable, same as
+   *  a photo scan's own prefill. */
+  prefill?: ProductPrefill
   /** Passed in rather than fetched here, so opening the form costs no request. */
   categories: Category[]
   /** The active product list, for the same-day duplicate check — see #108.
@@ -55,17 +55,47 @@ interface FormState {
   notes: string
 }
 
-function initialState(product?: Product, prefill?: { name: string; quantity: string }): FormState {
+export interface ProductPrefill {
+  name?: string
+  quantity?: string
+  expires_at?: string
+  unit?: string
+}
+
+/** Category and location from a name-suggestion match, merged into a form
+ *  state — see #133. Always overwrites rather than filling only blanks: the
+ *  same rule handleScan/handleBarcodeDetected already apply to their own
+ *  fields, and every call site fires at a single deliberate moment (the
+ *  form opening prefilled, a scan resolving, a barcode resolving, the name
+ *  field losing focus), not on every keystroke — so there is no risk of
+ *  repeatedly clobbering a choice made in between. */
+function applyNameSuggestion(state: FormState, match: ProductNameSuggestion): FormState {
   return {
+    ...state,
+    category_id: match.category_id !== null ? match.category_id.toString() : state.category_id,
+    location: match.location,
+  }
+}
+
+function initialState(
+  product: Product | undefined,
+  prefill: ProductPrefill | undefined,
+  nameSuggestions: ProductNameSuggestion[],
+): FormState {
+  const state: FormState = {
     name: product?.name ?? prefill?.name ?? '',
     category_id: product?.category_id?.toString() ?? '',
     // Strip the trailing zeros the API sends so the field is not "2.00".
     quantity: product ? product.quantity.replace(/\.?0+$/, '') : (prefill?.quantity ?? '1'),
-    unit: product?.unit ?? '',
-    expires_at: product?.expires_at ?? '',
+    unit: product?.unit ?? prefill?.unit ?? '',
+    expires_at: product?.expires_at ?? prefill?.expires_at ?? '',
     location: product?.location ?? 'fridge',
     notes: product?.notes ?? '',
   }
+  // A prefilled name is already settled, the same moment the name field
+  // losing focus is for a typed one.
+  const match = !product && prefill?.name ? findNameSuggestion(nameSuggestions, prefill.name) : null
+  return match ? applyNameSuggestion(state, match) : state
 }
 
 /** Create or edit a product. The same form serves both. */
@@ -79,7 +109,7 @@ export function ProductForm({
   onCancel,
   title,
 }: ProductFormProps) {
-  const [form, setForm] = useState<FormState>(() => initialState(product, prefill))
+  const [form, setForm] = useState<FormState>(() => initialState(product, prefill, nameSuggestions))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -124,19 +154,6 @@ export function ProductForm({
     setForm((current) => ({ ...current, [field]: value }))
     if (field === 'name') setDuplicateWarning(null)
   }
-
-  /** Category and location from a name-suggestion match, merged into an
-   *  in-progress form update — see #133. Always overwrites rather than
-   *  filling only blanks: the same rule handleScan/handleBarcodeDetected
-   *  already apply to their own fields, and every call site here fires at
-   *  a single deliberate moment (a scan resolving, a barcode resolving,
-   *  the name field losing focus), not on every keystroke — so there is
-   *  no risk of repeatedly clobbering a choice made in between. */
-  const applyNameSuggestion = (state: FormState, match: ProductNameSuggestion): FormState => ({
-    ...state,
-    category_id: match.category_id !== null ? match.category_id.toString() : state.category_id,
-    location: match.location,
-  })
 
   /** Reuses a previously used name's own category/location once the name
    *  field settles on an exact match — see #133. On blur, not on every

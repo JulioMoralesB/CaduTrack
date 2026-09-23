@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { LabelQueueDialog } from '@/components/LabelQueueDialog'
 import { ProductCard } from '@/components/ProductCard'
 import { ProductFilters } from '@/components/ProductFilters'
 import { ProductForm } from '@/components/ProductForm'
@@ -21,9 +22,24 @@ import { useCategories } from '@/hooks/useCategories'
 import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
 import { apiUrl, toErrorMessage } from '@/services/api'
+import { getCurrentLabelScans, queueLabelScan } from '@/services/labelScansService'
 import { deleteProduct } from '@/services/productsService'
 import { getCurrentTrip, uploadReceipt } from '@/services/tripsService'
-import type { Product, ShoppingTrip } from '@/services/types'
+import type { LabelScan, Product, ShoppingTrip } from '@/services/types'
+
+/** How often to check on photos still being read — a warm read takes a
+ *  couple of seconds, a cold model load tens of them. */
+const LABEL_POLL_MS = 3000
+
+/** "2 leyendo, 3 por revisar" — only the parts that apply. */
+function labelBannerText(scans: LabelScan[]): string {
+  const reading = scans.filter((scan) => scan.status === 'pending').length
+  const ready = scans.length - reading
+  const parts = []
+  if (reading > 0) parts.push(`${reading} leyendo`)
+  if (ready > 0) parts.push(`${ready} por revisar`)
+  return `Etiquetas: ${parts.join(', ')} — ${ready > 0 ? 'revisar' : 'ver'}`
+}
 
 /** What the screen is currently doing, beyond showing the list. */
 type Dialog =
@@ -34,6 +50,7 @@ type Dialog =
   | { kind: 'settings' }
   | { kind: 'history' }
   | { kind: 'trip' }
+  | { kind: 'labels' }
 
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
@@ -50,6 +67,12 @@ export function ProductList() {
   const [scanningReceipt, setScanningReceipt] = useState(false)
   const [receiptError, setReceiptError] = useState<string | null>(null)
   const receiptInputRef = useRef<HTMLInputElement>(null)
+
+  const [labelScans, setLabelScans] = useState<LabelScan[]>([])
+  const [uploadingLabels, setUploadingLabels] = useState<{ done: number; total: number } | null>(null)
+  const [labelError, setLabelError] = useState<string | null>(null)
+  const labelInputRef = useRef<HTMLInputElement>(null)
+  const labelsReading = labelScans.some((scan) => scan.status === 'pending')
 
   const visible = useMemo(
     () => sortProducts(applyFilters(products, filters), sort),
@@ -75,6 +98,73 @@ export function ProductList() {
       active = false
     }
   }, [])
+
+  const refreshLabelScans = useCallback(() => {
+    // Non-critical, same as the trip banner: a failed check just leaves the
+    // last known queue showing until the next one.
+    getCurrentLabelScans()
+      .then(setLabelScans)
+      .catch(() => {})
+  }, [])
+
+  // Queued photos from a previous visit — see #134: the queue survives a
+  // reload the same way an unfinished trip does.
+  useEffect(() => {
+    refreshLabelScans()
+  }, [refreshLabelScans])
+
+  // Only while something is still being read; nothing else about the queue
+  // changes without this screen being the one that changed it. Paused while
+  // the app is in the background — the camera app, typically, taking the
+  // next photo — and caught up the moment it's back.
+  useEffect(() => {
+    if (!labelsReading) return
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') refreshLabelScans()
+    }
+    const timer = window.setInterval(refreshIfVisible, LABEL_POLL_MS)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
+  }, [labelsReading, refreshLabelScans])
+
+  /** Uploads every chosen photo, one after another, then leaves the reading
+   *  to the server — see #134. Nothing waits on the model here, so the list
+   *  stays usable the whole time. */
+  const handleLabelsSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    // Cleared immediately, same as the receipt input.
+    event.target.value = ''
+    if (files.length === 0) return
+
+    setLabelError(null)
+    setUploadingLabels({ done: 0, total: files.length })
+    void (async () => {
+      let failed = 0
+      for (const [index, file] of files.entries()) {
+        try {
+          await queueLabelScan(await downscaleImage(file))
+          refreshLabelScans()
+        } catch {
+          failed += 1
+        }
+        setUploadingLabels({ done: index + 1, total: files.length })
+      }
+      if (failed > 0) {
+        setLabelError(
+          failed === 1 ? 'No se pudo subir 1 foto. Inténtalo de nuevo.' : `No se pudieron subir ${failed} fotos. Inténtalo de nuevo.`,
+        )
+      }
+      setUploadingLabels(null)
+    })()
+  }
+
+  const handleLabelsChanged = () => {
+    reload()
+    refreshLabelScans()
+  }
 
   const close = () => {
     setDialog({ kind: 'none' })
@@ -190,6 +280,21 @@ export function ProductList() {
           onChange={handleReceiptSelected}
           hidden
         />
+        <button type="button" onClick={() => labelInputRef.current?.click()} disabled={uploadingLabels !== null}>
+          {uploadingLabels ? `Subiendo ${uploadingLabels.done + 1}/${uploadingLabels.total}…` : 'Etiquetas'}
+        </button>
+        {/* No capture attribute, unlike Recibo: with it the phone goes
+            straight to the camera for a single shot, without it the picker
+            offers the camera too, plus choosing several photos taken
+            beforehand at once — see #134. */}
+        <input
+          ref={labelInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleLabelsSelected}
+          hidden
+        />
         <button
           type="button"
           className="button--primary"
@@ -203,6 +308,18 @@ export function ProductList() {
         <p className="form__error" role="alert">
           {receiptError}
         </p>
+      )}
+
+      {labelError && (
+        <p className="form__error" role="alert">
+          {labelError}
+        </p>
+      )}
+
+      {dialog.kind !== 'labels' && labelScans.length > 0 && (
+        <button type="button" className="trip-banner" onClick={() => setDialog({ kind: 'labels' })}>
+          {labelBannerText(labelScans)}
+        </button>
       )}
 
       {dialog.kind !== 'trip' && currentTrip && currentTrip.items.some((item) => item.resolved_at === null) && (
@@ -325,6 +442,17 @@ export function ProductList() {
           nameSuggestions={nameSuggestions}
           onClose={close}
           onTripChanged={handleTripChanged}
+        />
+      )}
+
+      {dialog.kind === 'labels' && (
+        <LabelQueueDialog
+          scans={labelScans}
+          categories={categories}
+          products={products}
+          nameSuggestions={nameSuggestions}
+          onClose={close}
+          onChanged={handleLabelsChanged}
         />
       )}
 
