@@ -1,14 +1,15 @@
-"""Barcode photo decoding tests — see #132.
+"""Barcode photo decoding tests — see #132 and #137.
 
-Real images, not mocked: this module's whole job is calling into zbar
-correctly, so a test that mocks pyzbar itself would only prove the mock
-was wired up, never that a real barcode photo actually decodes. Every
-image here is generated with python-barcode (a real encoder) and fed
-through the real decode_barcode_photo, the same round-trip
-barcode_parser.py's own docstring already holds itself to.
+Real images, not mocked: this module's whole job is calling into OpenCV
+and zbar correctly, so a test that mocks either would only prove the mock
+was wired up, never that a real barcode photo actually decodes. Generated
+images come from python-barcode (a real encoder) and go through the real
+decode_barcode_photo, the same round-trip barcode_parser.py's own
+docstring already holds itself to.
 """
 
 import io
+from pathlib import Path
 
 import barcode
 import pytest
@@ -16,6 +17,8 @@ from barcode.writer import ImageWriter
 from PIL import Image
 
 from app.barcode_photo import decode_barcode_photo
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _barcode_image(value: str, kind: str = "ean13") -> Image.Image:
@@ -51,6 +54,15 @@ def test_decodes_a_real_barcode_photo(kind, value):
     # python-barcode's own authoritative expected value (a no-op for
     # code128, which has no such digit to append).
     assert result == barcode.get_barcode_class(kind)(value).get_fullcode()
+
+
+def test_decodes_a_real_phone_photo_zbar_alone_cannot():
+    """#137: a crop of a real bottle photo. The logo printed right next to
+    the barcode reads as more bars to zbar scanning the whole frame, so it
+    found nothing; localizing the barcode first is what makes it readable."""
+    photo = (FIXTURES / "barcode_photo_real_label.jpg").read_bytes()
+
+    assert decode_barcode_photo(photo) == "7501055320639"
 
 
 def test_returns_none_when_the_photo_has_no_barcode_in_it():
