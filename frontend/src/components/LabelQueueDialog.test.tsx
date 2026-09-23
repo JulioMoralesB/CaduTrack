@@ -165,7 +165,8 @@ describe('LabelQueueDialog adding', () => {
 
     expect(screen.getByLabelText('Nombre')).toHaveValue('Yogur natural')
     expect(screen.getByLabelText('Caduca el')).toHaveValue('2026-10-15')
-    expect(screen.getByLabelText('Cantidad')).toHaveValue('0.90')
+    // A number input: its value reads back as a number, not the API's string.
+    expect(screen.getByLabelText('Cantidad')).toHaveValue(0.9)
     expect(screen.getByLabelText('Unidad')).toHaveValue('kg')
   })
 
