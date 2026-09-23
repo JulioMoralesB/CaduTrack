@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ReceiptTripDialog } from '@/components/ReceiptTripDialog'
-import type { Product, ShoppingTrip, ShoppingTripItem } from '@/services/types'
+import type { Product, ProductNameSuggestion, ShoppingTrip, ShoppingTripItem } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
   createProduct: vi.fn(),
@@ -70,7 +70,11 @@ function product(overrides: Partial<Product> = {}): Product {
   }
 }
 
-function renderDialog(overrides: Partial<ShoppingTrip> = {}, products: Product[] = []) {
+function renderDialog(
+  overrides: Partial<ShoppingTrip> = {},
+  products: Product[] = [],
+  nameSuggestions: ProductNameSuggestion[] = [],
+) {
   const onClose = vi.fn()
   const onTripChanged = vi.fn()
   render(
@@ -78,6 +82,7 @@ function renderDialog(overrides: Partial<ShoppingTrip> = {}, products: Product[]
       trip={trip(overrides)}
       categories={[]}
       products={products}
+      nameSuggestions={nameSuggestions}
       onClose={onClose}
       onTripChanged={onTripChanged}
     />,
@@ -352,6 +357,21 @@ describe('ReceiptTripDialog continue', () => {
     expect(await screen.findByText('Agregar producto (quedan 2)')).toBeInTheDocument()
     expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio')
     expect(screen.getByLabelText('Cantidad')).toHaveValue(1)
+  })
+
+  it('threads nameSuggestions through to the queued ProductForm — see #133', async () => {
+    mockedCreate.mockReturnValue(new Promise(() => {}))
+    renderDialog(
+      { items: [tripItem({ id: 1, name: 'Nopal limpio', is_food: true })] },
+      [],
+      [{ name: 'Nopal limpio', category_id: null, location: 'pantry' }],
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    await screen.findByLabelText('Nombre')
+    fireEvent.blur(screen.getByLabelText('Nombre'))
+
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
   })
 
   it('goes straight to the done screen when nothing was ticked', async () => {

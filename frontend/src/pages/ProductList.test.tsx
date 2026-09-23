@@ -15,6 +15,7 @@ vi.mock('@/services/productsService', () => ({
   consumeProduct: vi.fn(),
   listConsumedProducts: vi.fn(),
   restoreProduct: vi.fn(),
+  listNameSuggestions: vi.fn(),
 }))
 
 vi.mock('@/services/categoriesService', () => ({
@@ -40,6 +41,7 @@ const mockedConsume = vi.mocked(products.consumeProduct)
 const mockedHistory = vi.mocked(products.listConsumedProducts)
 const mockedRestore = vi.mocked(products.restoreProduct)
 const mockedCategories = vi.mocked(categories.listCategories)
+const mockedNameSuggestions = vi.mocked(products.listNameSuggestions)
 const mockedCurrentTrip = vi.mocked(trips.getCurrentTrip)
 const mockedUploadReceipt = vi.mocked(trips.uploadReceipt)
 
@@ -80,6 +82,7 @@ beforeEach(() => {
   mockedCategories.mockResolvedValue([
     { id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' },
   ])
+  mockedNameSuggestions.mockResolvedValue([])
   mockedCurrentTrip.mockResolvedValue(null)
 })
 

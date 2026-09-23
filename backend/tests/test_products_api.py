@@ -619,3 +619,53 @@ def test_filters_still_apply_within_the_active_list_once_something_is_consumed(a
     api_client.post(f"/products/{fridge_id}/consume")
 
     assert api_client.get("/products", params={"location": "fridge"}).json() == []
+
+
+# ── Name suggestions (#133) ───────────────────────────────────────────────────
+
+
+def test_name_suggestions_returns_one_row_per_distinct_name(api_client):
+    api_client.post("/products", json=_product(name="Leche entera"))
+    api_client.post("/products", json=_product(name="Yogurt griego"))
+
+    names = {s["name"] for s in api_client.get("/products/name-suggestions").json()}
+
+    assert names == {"Leche entera", "Yogurt griego"}
+
+
+def test_name_suggestions_carries_the_most_recent_rows_category_and_location(api_client):
+    category_id = api_client.post("/categories", json={"name": "Lácteos"}).json()["id"]
+    api_client.post("/products", json=_product(name="Leche", location="pantry", category_id=None))
+    api_client.post("/products", json=_product(name="Leche", location="fridge", category_id=category_id))
+
+    suggestion = next(
+        s for s in api_client.get("/products/name-suggestions").json() if s["name"] == "Leche"
+    )
+
+    assert suggestion["location"] == "fridge"
+    assert suggestion["category_id"] == category_id
+
+
+def test_name_suggestions_groups_case_and_whitespace_insensitively(api_client):
+    api_client.post("/products", json=_product(name="leche  "))
+    api_client.post("/products", json=_product(name="LECHE"))
+
+    suggestions = api_client.get("/products/name-suggestions").json()
+
+    assert len([s for s in suggestions if s["name"].strip().lower() == "leche"]) == 1
+
+
+def test_name_suggestions_includes_consumed_products_history(api_client):
+    """The common case this exists for: "I ran out of this and I'm buying
+    it again" — a name only ever bought before and fully consumed since
+    must still be suggested."""
+    product_id = api_client.post("/products", json=_product(name="Nopal limpio")).json()["id"]
+    api_client.post(f"/products/{product_id}/consume")
+
+    names = {s["name"] for s in api_client.get("/products/name-suggestions").json()}
+
+    assert "Nopal limpio" in names
+
+
+def test_name_suggestions_is_empty_when_there_are_no_products(api_client):
+    assert api_client.get("/products/name-suggestions").json() == []

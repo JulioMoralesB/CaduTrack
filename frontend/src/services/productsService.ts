@@ -1,6 +1,12 @@
 import { api } from '@/services/api'
 import { withRetry } from '@/services/retry'
-import type { IconReassignmentResult, Product, ProductFilters, ProductPayload } from '@/services/types'
+import type {
+  IconReassignmentResult,
+  Product,
+  ProductFilters,
+  ProductNameSuggestion,
+  ProductPayload,
+} from '@/services/types'
 
 export interface ProductListResult {
   products: Product[]
@@ -26,6 +32,14 @@ export async function listProducts(filters: ProductFilters = {}): Promise<Produc
 
 export async function getProduct(id: number): Promise<Product> {
   const { data } = await api.get<Product>(`/products/${id}`)
+  return data
+}
+
+/** One row per distinct product name ever used — see #133 and
+ *  GET /products/name-suggestions. Powers the name field's own
+ *  autocomplete and prefilling category/location for a repeat purchase. */
+export async function listNameSuggestions(): Promise<ProductNameSuggestion[]> {
+  const { data } = await api.get<ProductNameSuggestion[]>('/products/name-suggestions')
   return data
 }
 

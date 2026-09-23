@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductForm } from '@/components/ProductForm'
-import type { BarcodeLookupResult, LabelExtraction, Product } from '@/services/types'
+import type { BarcodeLookupResult, Category, LabelExtraction, Product, ProductNameSuggestion } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
   createProduct: vi.fn(),
@@ -37,6 +37,12 @@ function labelExtraction(overrides: Partial<LabelExtraction> = {}): LabelExtract
 function barcodeLookupResult(overrides: Partial<BarcodeLookupResult> = {}): BarcodeLookupResult {
   return { item_code: '5449000000996', name: null, icon: null, quantity: null, unit: null, ...overrides }
 }
+
+function nameSuggestion(overrides: Partial<ProductNameSuggestion> = {}): ProductNameSuggestion {
+  return { name: 'Leche entera', category_id: 3, location: 'pantry', ...overrides }
+}
+
+const LACTEOS: Category = { id: 3, name: 'Lácteos', created_at: '2026-08-01T00:00:00Z' }
 
 function selectPhoto() {
   const file = new File(['fake'], 'label.png', { type: 'image/png' })
@@ -524,5 +530,118 @@ describe('ProductForm duplicate check', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
     expect(mockedCreate).toHaveBeenCalledOnce()
+  })
+})
+
+describe('ProductForm name suggestions', () => {
+  it('lists previously used names in the datalist', () => {
+    render(
+      <ProductForm
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion(), nameSuggestion({ name: 'Yogurt griego' })]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    const options = Array.from(document.querySelectorAll('#name-suggestions option')).map(
+      (option) => (option as HTMLOptionElement).value,
+    )
+    expect(options).toEqual(['Leche entera', 'Yogurt griego'])
+  })
+
+  it('fills category and location once the typed name exactly matches, on blur', () => {
+    render(
+      <ProductForm
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion()]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: '  leche entera  ' } })
+    fireEvent.blur(screen.getByLabelText('Nombre'))
+
+    expect(screen.getByLabelText('Categoría')).toHaveValue('3')
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+  })
+
+  it('leaves category and location alone when nothing matches', () => {
+    render(
+      <ProductForm
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion()]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Algo distinto' } })
+    fireEvent.blur(screen.getByLabelText('Nombre'))
+
+    expect(screen.getByLabelText('Categoría')).toHaveValue('')
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('fridge')
+  })
+
+  it('offers no suggestions and never autofills while editing', () => {
+    const product = fakeProduct({ name: 'Leche entera' })
+    render(
+      <ProductForm
+        product={product}
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion()]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    expect(document.getElementById('name-suggestions')).not.toBeInTheDocument()
+    fireEvent.blur(screen.getByLabelText('Nombre'))
+    expect(screen.getByLabelText('Categoría')).toHaveValue('')
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('fridge')
+  })
+
+  it('applies a matching suggestion once a label scan resolves the name', async () => {
+    mockedExtract.mockResolvedValue(labelExtraction({ name: 'Leche entera' }))
+    render(
+      <ProductForm
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion()]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    selectPhoto()
+
+    await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Leche entera'))
+    expect(screen.getByLabelText('Categoría')).toHaveValue('3')
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+  })
+
+  it('applies a matching suggestion once a barcode lookup resolves the name', async () => {
+    mockedScanBarcodePhoto.mockResolvedValue({ raw: '5449000000996' })
+    mockedLookupBarcode.mockResolvedValue(barcodeLookupResult({ name: 'Leche entera' }))
+    render(
+      <ProductForm
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion()]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    scanBarcode()
+
+    await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Leche entera'))
+    expect(screen.getByLabelText('Categoría')).toHaveValue('3')
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
   })
 })

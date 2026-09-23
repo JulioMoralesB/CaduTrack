@@ -4,11 +4,12 @@ import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
 import { findDuplicateToday } from '@/duplicateCheck'
 import { LOCATION_LABELS, quantityLabel } from '@/labels'
+import { findNameSuggestion } from '@/nameSuggestions'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
 import { lookupBarcode, rememberBarcode, scanBarcodePhoto } from '@/services/barcodesService'
 import { adjustProductQuantity, createProduct, replaceProduct } from '@/services/productsService'
-import type { Category, Location, Product, ProductPayload } from '@/services/types'
+import type { Category, Location, Product, ProductNameSuggestion, ProductPayload } from '@/services/types'
 import { extractLabel } from '@/services/visionService'
 
 interface ProductFormProps {
@@ -25,6 +26,11 @@ interface ProductFormProps {
    *  Ignored when editing: a product being edited is never a duplicate of
    *  itself. */
   products: Product[]
+  /** Previously used names, for the name field's own autocomplete and for
+   *  prefilling category/location on an exact match — see #133. Optional,
+   *  defaulting to none: a caller that has not fetched these yet (or never
+   *  will) still gets a fully working form, just without the convenience. */
+  nameSuggestions?: ProductNameSuggestion[]
   /** Called with the server's own response, so a caller that needs the new
    *  product's id — resolving a shopping trip item into it, see #84 — has
    *  it without a second request. */
@@ -63,7 +69,16 @@ function initialState(product?: Product, prefill?: { name: string; quantity: str
 }
 
 /** Create or edit a product. The same form serves both. */
-export function ProductForm({ product, prefill, categories, products, onSaved, onCancel, title }: ProductFormProps) {
+export function ProductForm({
+  product,
+  prefill,
+  categories,
+  products,
+  nameSuggestions = [],
+  onSaved,
+  onCancel,
+  title,
+}: ProductFormProps) {
   const [form, setForm] = useState<FormState>(() => initialState(product, prefill))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,6 +125,28 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
     if (field === 'name') setDuplicateWarning(null)
   }
 
+  /** Category and location from a name-suggestion match, merged into an
+   *  in-progress form update — see #133. Always overwrites rather than
+   *  filling only blanks: the same rule handleScan/handleBarcodeDetected
+   *  already apply to their own fields, and every call site here fires at
+   *  a single deliberate moment (a scan resolving, a barcode resolving,
+   *  the name field losing focus), not on every keystroke — so there is
+   *  no risk of repeatedly clobbering a choice made in between. */
+  const applyNameSuggestion = (state: FormState, match: ProductNameSuggestion): FormState => ({
+    ...state,
+    category_id: match.category_id !== null ? match.category_id.toString() : state.category_id,
+    location: match.location,
+  })
+
+  /** Reuses a previously used name's own category/location once the name
+   *  field settles on an exact match — see #133. On blur, not on every
+   *  keystroke, for the same "one deliberate moment" reason as the
+   *  applyNameSuggestion comment above. */
+  const handleNameBlur = () => {
+    const match = findNameSuggestion(nameSuggestions, form.name)
+    if (match) setForm((current) => applyNameSuggestion(current, match))
+  }
+
   /**
    * The photo is an accuracy shortcut, not a separate flow: it fills in
    * whatever the model was confident about and leaves the rest exactly as
@@ -132,13 +169,17 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
     void (async () => {
       try {
         const extracted = await extractLabel(await downscaleImage(file))
-        setForm((current) => ({
-          ...current,
-          name: extracted.name ?? current.name,
-          expires_at: extracted.expires_at ?? current.expires_at,
-          quantity: extracted.quantity ?? current.quantity,
-          unit: extracted.unit ?? current.unit,
-        }))
+        const suggestion = extracted.name ? findNameSuggestion(nameSuggestions, extracted.name) : null
+        setForm((current) => {
+          const next = {
+            ...current,
+            name: extracted.name ?? current.name,
+            expires_at: extracted.expires_at ?? current.expires_at,
+            quantity: extracted.quantity ?? current.quantity,
+            unit: extracted.unit ?? current.unit,
+          }
+          return suggestion ? applyNameSuggestion(next, suggestion) : next
+        })
         setScanHint(
           extracted.name || extracted.expires_at || extracted.quantity
             ? 'Foto leída. Revisa los datos antes de guardar.'
@@ -191,12 +232,16 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
     void (async () => {
       try {
         const result = await lookupBarcode(raw)
-        setForm((current) => ({
-          ...current,
-          name: result.name ?? current.name,
-          quantity: result.quantity ?? current.quantity,
-          unit: result.unit ?? current.unit,
-        }))
+        const suggestion = result.name ? findNameSuggestion(nameSuggestions, result.name) : null
+        setForm((current) => {
+          const next = {
+            ...current,
+            name: result.name ?? current.name,
+            quantity: result.quantity ?? current.quantity,
+            unit: result.unit ?? current.unit,
+          }
+          return suggestion ? applyNameSuggestion(next, suggestion) : next
+        })
         setPendingBarcode({ itemCode: result.item_code, icon: result.icon })
         setBarcodeHint(
           result.name || result.quantity
@@ -368,10 +413,23 @@ export function ProductForm({ product, prefill, categories, products, onSaved, o
             type="text"
             value={form.name}
             onChange={(event) => update('name', event.target.value)}
+            // Suggestions and the category/location autofill they carry are
+            // a create-time convenience only — see #133. Re-typing an
+            // existing product's own name while editing it must not
+            // silently pull in some other product's category or location.
+            onBlur={isEdit ? undefined : handleNameBlur}
+            list={isEdit ? undefined : 'name-suggestions'}
             required
             maxLength={255}
             autoFocus
           />
+          {!isEdit && (
+            <datalist id="name-suggestions">
+              {nameSuggestions.map((suggestion) => (
+                <option key={suggestion.name} value={suggestion.name} />
+              ))}
+            </datalist>
+          )}
         </label>
 
         <label className="form__field">

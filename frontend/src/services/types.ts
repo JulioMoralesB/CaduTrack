@@ -40,6 +40,14 @@ export interface Product {
   status: ExpiryStatus
 }
 
+/** A previously used product name and what its most recent row was
+ *  categorized/stored as — see #133 and GET /products/name-suggestions. */
+export interface ProductNameSuggestion {
+  name: string
+  category_id: number | null
+  location: Location
+}
+
 export interface ProductFilters {
   category_id?: number
   location?: Location

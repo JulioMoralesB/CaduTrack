@@ -28,6 +28,21 @@ class ProductCreate(ProductBase):
     """Payload for creating a product."""
 
 
+class ProductNameSuggestion(BaseModel):
+    """A previously used product name, and what its most recent product row
+    was categorized/stored as — see #133.
+
+    Powers both the name field's own autocomplete and prefilling category
+    and location once a typed, scanned, or looked-up name exactly matches
+    one of these, so a repeat purchase does not start from the form's bare
+    defaults every time.
+    """
+
+    name: str
+    category_id: int | None = None
+    location: Location
+
+
 class ProductUpdate(ProductBase):
     """Payload for replacing a product.
 

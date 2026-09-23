@@ -1,5 +1,13 @@
 import type { Product } from '@/services/types'
 
+/** Trimmed, case-insensitive — shared by every exact-name match in this
+ *  app (this file's own duplicate check, #133's name suggestions) so a
+ *  name typed with different spacing or capitalization still counts as
+ *  the same product. */
+export function normalizeProductName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
 /**
  * The active product this name most likely duplicates, if any — see #108.
  *
@@ -15,7 +23,7 @@ import type { Product } from '@/services/types'
  * missed one does.
  */
 export function findDuplicateToday(products: Product[], name: string): Product | null {
-  const normalized = name.trim().toLowerCase()
+  const normalized = normalizeProductName(name)
   if (!normalized) return null
 
   const today = new Date().toDateString()
@@ -23,7 +31,7 @@ export function findDuplicateToday(products: Product[], name: string): Product |
     products.find(
       (product) =>
         product.consumed_at === null &&
-        product.name.trim().toLowerCase() === normalized &&
+        normalizeProductName(product.name) === normalized &&
         new Date(product.created_at).toDateString() === today,
     ) ?? null
   )
