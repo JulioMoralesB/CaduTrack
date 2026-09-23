@@ -3,7 +3,7 @@ import { AxiosError } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductList } from '@/pages/ProductList'
-import type { Product } from '@/services/types'
+import type { LabelScan, Product } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
   listProducts: vi.fn(),
@@ -29,9 +29,21 @@ vi.mock('@/services/tripsService', () => ({
   resolveTripItem: vi.fn(),
 }))
 
+vi.mock('@/services/labelScansService', () => ({
+  getCurrentLabelScans: vi.fn(),
+  queueLabelScan: vi.fn(),
+  dropLabelScan: vi.fn(),
+  resolveLabelScan: vi.fn(),
+  retryLabelScan: vi.fn(),
+  labelScanImageUrl: (id: number) => `/api/label-scans/${id}/image`,
+}))
+
 const products = await import('@/services/productsService')
 const categories = await import('@/services/categoriesService')
 const trips = await import('@/services/tripsService')
+const labelScans = await import('@/services/labelScansService')
+const mockedCurrentLabelScans = vi.mocked(labelScans.getCurrentLabelScans)
+const mockedQueueLabelScan = vi.mocked(labelScans.queueLabelScan)
 
 const mockedList = vi.mocked(products.listProducts)
 const mockedCreate = vi.mocked(products.createProduct)
@@ -84,6 +96,7 @@ beforeEach(() => {
   ])
   mockedNameSuggestions.mockResolvedValue([])
   mockedCurrentTrip.mockResolvedValue(null)
+  mockedCurrentLabelScans.mockResolvedValue([])
 })
 
 describe('ProductList', () => {
@@ -605,5 +618,104 @@ describe('recovering from a stale list', () => {
     // Refetching on the way out wastes a request nobody is waiting for.
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(mockedList).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('queuing label photos', () => {
+  function labelScan(overrides: Partial<LabelScan> = {}): LabelScan {
+    return {
+      id: 1,
+      created_at: '2026-09-22T00:00:00Z',
+      status: 'read',
+      name: 'Yogur natural',
+      expires_at: '2026-10-15',
+      quantity: null,
+      unit: null,
+      resolved_at: null,
+      product_id: null,
+      ...overrides,
+    }
+  }
+
+  function selectLabels(container: HTMLElement, count: number) {
+    const input = container.querySelector('input[type="file"][multiple]')
+    if (!input) throw new Error('label file input not found')
+    const files = Array.from({ length: count }, (_, i) => new File(['fake'], `label${i}.jpg`, { type: 'image/jpeg' }))
+    fireEvent.change(input, { target: { files } })
+  }
+
+  it('shows a banner for photos left from a previous visit', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedCurrentLabelScans.mockResolvedValue([
+      labelScan({ id: 1, status: 'pending', name: null }),
+      labelScan({ id: 2 }),
+      labelScan({ id: 3, status: 'failed', name: null }),
+    ])
+
+    render(<ProductList />)
+
+    expect(
+      await screen.findByRole('button', { name: 'Etiquetas: 1 leyendo, 2 por revisar — revisar' }),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the queue from its banner', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedCurrentLabelScans.mockResolvedValue([labelScan()])
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: /^Etiquetas: 1 por revisar/ }))
+
+    expect(screen.getByRole('heading', { name: 'Etiquetas' })).toBeInTheDocument()
+    expect(screen.getByText('Yogur natural')).toBeInTheDocument()
+  })
+
+  it('uploads every chosen photo, one request each', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedQueueLabelScan.mockResolvedValue(labelScan({ status: 'pending', name: null }))
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Etiquetas' })
+    selectLabels(container, 3)
+
+    await waitFor(() => expect(mockedQueueLabelScan).toHaveBeenCalledTimes(3))
+    expect(await screen.findByRole('button', { name: 'Etiquetas' })).toBeEnabled()
+  })
+
+  it('says how many photos failed to upload', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedQueueLabelScan
+      .mockResolvedValueOnce(labelScan({ status: 'pending' }))
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockRejectedValueOnce(new Error('boom'))
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Etiquetas' })
+    selectLabels(container, 3)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron subir 2 fotos.')
+  })
+
+  it('keeps checking on photos still being read, and stops once none are', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+      mockedList.mockResolvedValue({ products: [], cachedAt: null })
+      mockedCurrentLabelScans
+        .mockResolvedValueOnce([labelScan({ status: 'pending', name: null })])
+        .mockResolvedValue([labelScan()])
+
+      render(<ProductList />)
+      await screen.findByRole('button', { name: /^Etiquetas: 1 leyendo/ })
+
+      await vi.advanceTimersByTimeAsync(3000)
+
+      expect(await screen.findByRole('button', { name: /^Etiquetas: 1 por revisar/ })).toBeInTheDocument()
+      const calls = mockedCurrentLabelScans.mock.calls.length
+      await vi.advanceTimersByTimeAsync(9000)
+      expect(mockedCurrentLabelScans).toHaveBeenCalledTimes(calls)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
