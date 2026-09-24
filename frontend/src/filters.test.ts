@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { NO_FILTERS, applyFilters, hasActiveFilters, sortProducts } from '@/filters'
+import { NO_FILTERS, applyFilters, hasActiveFilters, normalizeForSearch, sortProducts } from '@/filters'
 import type { Product } from '@/services/types'
 
 function product(overrides: Partial<Product> = {}): Product {
@@ -67,6 +67,22 @@ describe('applyFilters', () => {
   })
 })
 
+describe('search by name — see #141', () => {
+  it('matches part of the name, ignoring case and accents', () => {
+    expect(names(applyFilters(pantry, { ...NO_FILTERS, query: 'YOG' }))).toEqual(['Yogur'])
+    expect(names(applyFilters(pantry, { ...NO_FILTERS, query: 'name' }))).toEqual(['Ñame'])
+  })
+
+  it('treats a blank query as no query at all', () => {
+    expect(applyFilters(pantry, { ...NO_FILTERS, query: '   ' })).toHaveLength(4)
+    expect(hasActiveFilters({ ...NO_FILTERS, query: '   ' })).toBe(false)
+  })
+
+  it('normalizes text the same way on both sides', () => {
+    expect(normalizeForSearch('  Jamón  ')).toBe('jamon')
+  })
+})
+
 describe('hasActiveFilters', () => {
   it('is false for the default filters', () => {
     expect(hasActiveFilters(NO_FILTERS)).toBe(false)
@@ -76,6 +92,7 @@ describe('hasActiveFilters', () => {
     ['categoryId', { ...NO_FILTERS, categoryId: 1 as const }],
     ['location', { ...NO_FILTERS, location: 'fridge' as const }],
     ['status', { ...NO_FILTERS, status: 'fresh' as const }],
+    ['query', { ...NO_FILTERS, query: 'leche' }],
   ])('is true when %s is set', (_field, filters) => {
     expect(hasActiveFilters(filters)).toBe(true)
   })

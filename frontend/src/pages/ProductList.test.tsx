@@ -485,26 +485,44 @@ describe('filtering and sorting', () => {
     product({ id: 3, name: 'Guisantes', location: 'freezer', status: 'fresh', days_until_expiry: 120 }),
   ]
 
+  function chip(name: string | RegExp) {
+    return screen.getByRole('button', { name })
+  }
+
   it('narrows the list by location', async () => {
     mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
 
-    fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'pantry' } })
+    fireEvent.click(chip('Alacena'))
 
     expect(headingNames()).toEqual(['Arroz'])
+    expect(chip('Alacena')).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('narrows the list by status', async () => {
+  it('narrows the list by status, and a second tap undoes it', async () => {
     mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 
     render(<ProductList />)
     await screen.findByText('Yogur')
 
-    fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'expired' } })
-
+    fireEvent.click(chip(/^Vencidos/))
     expect(headingNames()).toEqual(['Yogur'])
+
+    fireEvent.click(chip(/^Vencidos/))
+    expect(headingNames()).toHaveLength(3)
+  })
+
+  it('counts what needs attention on the status chips — see #141', async () => {
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    expect(chip('Vencidos, 1')).toBeInTheDocument()
+    // Nothing is expiring soon: no count rather than a zero.
+    expect(chip('Por caducar')).toBeInTheDocument()
   })
 
   it('combines filters instead of replacing them', async () => {
@@ -513,10 +531,39 @@ describe('filtering and sorting', () => {
     render(<ProductList />)
     await screen.findByText('Yogur')
 
-    fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'fresh' } })
-    fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'freezer' } })
+    fireEvent.click(chip(/^Vencidos/))
+    fireEvent.click(chip('Alacena'))
 
-    expect(headingNames()).toEqual(['Guisantes'])
+    // Either one alone would match something; both together match nothing.
+    expect(screen.getByText('Ningún producto coincide con los filtros.')).toBeInTheDocument()
+  })
+
+  it('finds a product by name, ignoring case and accents', async () => {
+    mockedList.mockResolvedValue({
+      products: [...pantry, product({ id: 4, name: 'Jamón de pavo', status: 'fresh', days_until_expiry: 10 })],
+      cachedAt: null,
+    })
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar producto' }), { target: { value: 'JAMON' } })
+
+    expect(headingNames()).toEqual(['Jamón de pavo'])
+    expect(screen.getByText('1 de 4')).toBeInTheDocument()
+  })
+
+  it('keeps category and sort behind "Más filtros"', async () => {
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+    expect(screen.queryByLabelText('Ordenar por')).not.toBeInTheDocument()
+
+    fireEvent.click(chip('Más filtros'))
+
+    expect(screen.getByLabelText('Ordenar por')).toBeInTheDocument()
+    expect(screen.getByLabelText('Categoría')).toBeInTheDocument()
   })
 
   it('reorders by name without refetching', async () => {
@@ -525,6 +572,7 @@ describe('filtering and sorting', () => {
     render(<ProductList />)
     await screen.findByText('Yogur')
 
+    fireEvent.click(chip('Más filtros'))
     fireEvent.change(screen.getByLabelText('Ordenar por'), { target: { value: 'name' } })
 
     expect(headingNames()).toEqual([
@@ -544,7 +592,7 @@ describe('filtering and sorting', () => {
     // No count while nothing is filtered.
     expect(screen.queryByText('1 de 3')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Ubicación'), { target: { value: 'pantry' } })
+    fireEvent.click(chip('Alacena'))
     expect(screen.getByText('1 de 3')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Quitar filtros' }))
@@ -558,7 +606,7 @@ describe('filtering and sorting', () => {
     render(<ProductList />)
     await screen.findByText('Yogur')
 
-    fireEvent.change(screen.getByLabelText('Estado'), { target: { value: 'expiring_soon' } })
+    fireEvent.click(chip('Por caducar'))
 
     expect(screen.getByText('Ningún producto coincide con los filtros.')).toBeInTheDocument()
     // Telling someone with a full pantry to "add their first purchase" is wrong.

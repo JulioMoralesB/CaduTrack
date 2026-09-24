@@ -1,17 +1,11 @@
 /** Spanish UI labels for the language-neutral keys the API stores. */
 
-import type { ExpiryStatus, Location } from '@/services/types'
+import type { Location } from '@/services/types'
 
 export const LOCATION_LABELS: Record<Location, string> = {
   fridge: 'Refrigerador',
   freezer: 'Congelador',
   pantry: 'Alacena',
-}
-
-export const STATUS_LABELS: Record<ExpiryStatus, string> = {
-  fresh: 'En buen estado',
-  expiring_soon: 'Por caducar',
-  expired: 'Caducado',
 }
 
 /**
