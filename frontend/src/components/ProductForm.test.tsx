@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductForm } from '@/components/ProductForm'
+import { QUICK_DATES, quickDateValue } from '@/quickDates'
 import type { BarcodeLookupResult, Category, LabelExtraction, Product, ProductNameSuggestion } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
@@ -272,8 +273,45 @@ describe('ProductForm label scan', () => {
     selectPhoto()
 
     expect(screen.getByLabelText('Foto de la etiqueta (opcional)')).toBeDisabled()
+    expect(screen.getByRole('button', { name: /leyendo/i })).toBeDisabled()
     resolveRequest(labelExtraction())
     await waitFor(() => expect(screen.getByLabelText('Foto de la etiqueta (opcional)')).not.toBeDisabled())
+    expect(screen.getByRole('button', { name: /leer etiqueta/i })).toBeEnabled()
+  })
+})
+
+describe('ProductForm layout — see #142', () => {
+  it('offers the photo scans as real buttons that open the hidden camera inputs', () => {
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    const labelInput = screen.getByLabelText('Foto de la etiqueta (opcional)')
+    const barcodeInput = screen.getByLabelText('Foto del código de barras (opcional)')
+    const labelClick = vi.spyOn(labelInput, 'click')
+    const barcodeClick = vi.spyOn(barcodeInput, 'click')
+
+    fireEvent.click(screen.getByRole('button', { name: /leer etiqueta/i }))
+    fireEvent.click(screen.getByRole('button', { name: /leer código/i }))
+
+    expect(labelInput).not.toBeVisible()
+    expect(labelClick).toHaveBeenCalledTimes(1)
+    expect(barcodeClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('fills the expiry date from a quick date', () => {
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+    const week = QUICK_DATES.find((quick) => quick.label === '1 semana')
+    if (!week) throw new Error('no "1 semana" quick date')
+
+    fireEvent.click(screen.getByRole('button', { name: '1 semana' }))
+
+    expect(screen.getByLabelText('Caduca el')).toHaveValue(quickDateValue(week))
+    expect(screen.getByRole('button', { name: '1 semana' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '1 mes' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('offers the quick dates when editing too', () => {
+    render(<ProductForm product={fakeProduct()} categories={[]} products={[]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    expect(screen.getByRole('group', { name: 'Fechas rápidas' })).toBeInTheDocument()
   })
 })
 
