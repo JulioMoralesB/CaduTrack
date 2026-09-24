@@ -470,6 +470,49 @@ describe('scanning a receipt', () => {
     expect(await screen.findByText('Plátano')).toBeInTheDocument()
   })
 
+  it('keeps the dialog on its own receipt when finishing it surfaces an older one — see #153', async () => {
+    const pendingLine = { quantity: '1.00', is_food: true, resolved_at: null, product_id: null }
+    const olderTrip = {
+      id: 4,
+      created_at: '2026-09-21T18:00:00Z',
+      stated_item_count: null,
+      items: [{ id: 1, name: 'Espinacas', ...pendingLine }],
+      counted_quantity: '1.00',
+      reconciled: null,
+    }
+    mockedList.mockResolvedValue({ products: [product({ id: 5, name: 'Espinacas' })], cachedAt: null })
+    mockedCurrentTrip.mockResolvedValue({
+      ...olderTrip,
+      id: 5,
+      created_at: '2026-09-24T18:00:00Z',
+      items: [{ id: 10, name: 'Espinacas', ...pendingLine }],
+    })
+    vi.mocked(trips.resolveTripItem).mockResolvedValue({
+      id: 10,
+      name: 'Espinacas',
+      quantity: '1.00',
+      is_food: true,
+      resolved_at: '2026-09-24T18:05:00Z',
+      product_id: 5,
+    })
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: /recibo pendiente \(24 sep\)/i }))
+    // Once this receipt is done, "current" is the older duplicate scan.
+    mockedCurrentTrip.mockResolvedValue(olderTrip)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+    fireEvent.change(screen.getByLabelText('Vincular Espinacas a un producto existente'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(await screen.findByText('Ya no quedan productos pendientes en este recibo.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Recibo del 24 sep' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Entendido' }))
+
+    expect(await screen.findByRole('button', { name: /recibo pendiente \(21 sep\)/i })).toBeInTheDocument()
+  })
+
   it('does not show a banner once every item in the leftover trip is already resolved', async () => {
     mockedList.mockResolvedValue({ products: [], cachedAt: null })
     mockedCurrentTrip.mockResolvedValue({

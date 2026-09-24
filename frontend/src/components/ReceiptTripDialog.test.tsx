@@ -471,3 +471,43 @@ describe('ReceiptTripDialog adding', () => {
     expect(screen.getByText('Plátano')).toBeInTheDocument()
   })
 })
+
+describe('ReceiptTripDialog telling receipts apart — see #153', () => {
+  it('names the receipt by the day it was scanned', () => {
+    renderDialog({ created_at: '2026-09-22T18:00:00Z' })
+
+    expect(screen.getByRole('heading', { name: 'Recibo del 22 sep' })).toBeInTheDocument()
+  })
+
+  it('discards every pending line only after a confirmation', async () => {
+    mockedDrop.mockImplementation((_tripId, itemId) =>
+      Promise.resolve(tripItem({ id: itemId, resolved_at: '2026-09-24T00:00:00Z' })),
+    )
+    const { onTripChanged } = renderDialog({
+      items: [tripItem({ id: 1, name: 'Nopal limpio' }), tripItem({ id: 2, name: 'Plátano' })],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar recibo' }))
+    expect(mockedDrop).not.toHaveBeenCalled()
+    expect(screen.getByText(/¿Descartar los 2 productos que faltan\?/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }))
+
+    await waitFor(() => expect(mockedDrop).toHaveBeenCalledTimes(2))
+    expect(mockedDrop).toHaveBeenCalledWith(1, 1)
+    expect(mockedDrop).toHaveBeenCalledWith(1, 2)
+    expect(await screen.findByText('Ya no quedan productos pendientes en este recibo.')).toBeInTheDocument()
+    expect(onTripChanged).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Entendido' })).toBeInTheDocument()
+  })
+
+  it('backs out of discarding without touching anything', () => {
+    renderDialog()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar recibo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+
+    expect(mockedDrop).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeInTheDocument()
+  })
+})
