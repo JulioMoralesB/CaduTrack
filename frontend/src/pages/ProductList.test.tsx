@@ -336,6 +336,23 @@ describe('consuming a product', () => {
     // took the reload path instead of the local removal one.
     expect(mockedList).toHaveBeenCalledTimes(1)
   })
+
+  it('offers to undo it — see #143', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+    mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))
+    mockedRestore.mockResolvedValue(product())
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Leche entera como consumido' }))
+
+    expect(await screen.findByText('Consumido: Leche entera')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+
+    await waitFor(() => expect(mockedRestore).toHaveBeenCalledWith(1))
+    // Back from the server through a reload, not re-inserted locally.
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByText('Consumido: Leche entera')).not.toBeInTheDocument())
+  })
 })
 
 describe('viewing history', () => {

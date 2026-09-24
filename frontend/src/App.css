@@ -1045,3 +1045,45 @@
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+
+/* Undo toast — see #143. Inverted colors so it reads as separate from the
+   list in either theme. Below the modal's own z-index: an open form must
+   never have its Guardar covered by a leftover toast. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: calc(100% - 2rem);
+  max-width: 28rem;
+  padding: 0.375rem 0.5rem 0.375rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 0.875rem;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+  transform: translateX(-50%);
+}
+
+.toast__message {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast__action,
+.toast__close {
+  flex-shrink: 0;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: none;
+  background: none;
+  color: inherit;
+  font-weight: 700;
+}
+
+.toast__action {
+  text-decoration: underline;
+}

@@ -8,6 +8,7 @@ import { ProductForm } from '@/components/ProductForm'
 import { ProductHistory } from '@/components/ProductHistory'
 import { ReceiptTripDialog } from '@/components/ReceiptTripDialog'
 import { StaleBanner } from '@/components/StaleBanner'
+import { UndoToast } from '@/components/UndoToast'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { downscaleImage } from '@/downscaleImage'
 import {
@@ -23,7 +24,7 @@ import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
 import { apiUrl, toErrorMessage } from '@/services/api'
 import { getCurrentLabelScans, queueLabelScan } from '@/services/labelScansService'
-import { deleteProduct } from '@/services/productsService'
+import { deleteProduct, restoreProduct } from '@/services/productsService'
 import { getCurrentTrip, uploadReceipt } from '@/services/tripsService'
 import type { LabelScan, Product, ShoppingTrip } from '@/services/types'
 
@@ -71,6 +72,7 @@ export function ProductList() {
   const [labelScans, setLabelScans] = useState<LabelScan[]>([])
   const [uploadingLabels, setUploadingLabels] = useState<{ done: number; total: number } | null>(null)
   const [labelError, setLabelError] = useState<string | null>(null)
+  const [lastConsumed, setLastConsumed] = useState<Product | null>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
   const labelsReading = labelScans.some((scan) => scan.status === 'pending')
 
@@ -160,6 +162,21 @@ export function ProductList() {
       setUploadingLabels(null)
     })()
   }
+
+  /** Takes the row off the list and offers a way back — see #143: undoing
+   *  a mistaken tap used to mean knowing to look in Historial. */
+  const handleConsumed = (id: number) => {
+    const consumed = products.find((product) => product.id === id)
+    removeProduct(id)
+    if (consumed) setLastConsumed(consumed)
+  }
+
+  const undoConsume = async (product: Product) => {
+    await restoreProduct(product.id)
+    reload()
+  }
+
+  const dismissUndo = useCallback(() => setLastConsumed(null), [])
 
   const handleLabelsChanged = () => {
     reload()
@@ -403,7 +420,7 @@ export function ProductList() {
                   onEdit={(target) => setDialog({ kind: 'edit', product: target })}
                   onDelete={(target) => setDialog({ kind: 'delete', product: target })}
                   onProductChanged={replaceProduct}
-                  onConsumed={removeProduct}
+                  onConsumed={handleConsumed}
                 />
               ))}
             </ul>
@@ -443,6 +460,17 @@ export function ProductList() {
           nameSuggestions={nameSuggestions}
           onClose={close}
           onTripChanged={handleTripChanged}
+        />
+      )}
+
+      {lastConsumed && (
+        <UndoToast
+          key={lastConsumed.id}
+          // Name last, not "X marcado como…": no agreement to get wrong for
+          // a feminine or plural name.
+          message={`Consumido: ${lastConsumed.name}`}
+          onUndo={() => undoConsume(lastConsumed)}
+          onDismiss={dismissUndo}
         />
       )}
 
