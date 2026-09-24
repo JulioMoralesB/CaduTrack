@@ -310,18 +310,83 @@
   }
 }
 
-/* Just the two content-creation actions now — Historial and Ajustes moved
-   into app__header-actions, see App.css's own note there. Equal width
-   rather than flex-end: with only two buttons left, filling the row reads
-   as one deliberate choice instead of two buttons stranded on one side. */
+/* One "+ Agregar" entry point — see #147. It replaced three equal buttons
+   that crowded the row and wrapped "Agregar producto" onto two lines. */
 .list-header {
   display: flex;
   gap: 0.5rem;
-  padding-bottom: 0.875rem;
+  padding-bottom: 0.75rem;
 }
 
-.list-header > button {
+.list-header__status {
+  margin: -0.25rem 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.add-menu {
+  position: relative;
   flex: 1;
+}
+
+.add-menu__toggle {
+  width: 100%;
+  min-height: 2.75rem;
+  font-weight: 600;
+}
+
+/* Floats over the list instead of pushing it down, and sits under the
+   modal's z-index so it can never cover an open form. */
+.add-menu__options {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  padding: 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+}
+
+.add-menu__option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.add-menu__option:hover:not(:disabled) {
+  background: var(--bg);
+}
+
+.add-menu__icon {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.add-menu__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.add-menu__title {
+  font-weight: 600;
+}
+
+.add-menu__hint {
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .product-card__actions {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 
+import { AddMenu } from '@/components/AddMenu'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { LabelQueueDialog } from '@/components/LabelQueueDialog'
 import { ProductCard } from '@/components/ProductCard'
@@ -278,48 +279,45 @@ export function ProductList() {
       </header>
 
       <div className="list-header">
-        {/* A real click on a hidden input, not a wrapping <label>: the label
-            text here would otherwise absorb "Leyendo…" into its own
-            accessible name while a scan is in flight — see #83's own note
-            on ProductForm for the exact same fix, same reason. */}
-        <button
-          type="button"
-          onClick={() => receiptInputRef.current?.click()}
-          disabled={scanningReceipt}
-        >
-          {scanningReceipt ? 'Leyendo…' : 'Recibo'}
-        </button>
+        <AddMenu
+          onManual={() => setDialog({ kind: 'create' })}
+          onLabels={() => labelInputRef.current?.click()}
+          onReceipt={() => receiptInputRef.current?.click()}
+          labelsBusy={uploadingLabels !== null}
+          receiptBusy={scanningReceipt}
+        />
+        {/* Hidden inputs driven by AddMenu's options — a real click on a
+            hidden input rather than a wrapping <label>, same as ProductForm's
+            photo buttons. Recibo keeps capture (straight to the camera, one
+            shot); Varias etiquetas doesn't, so the picker also offers
+            choosing several photos taken beforehand — see #134. */}
         <input
           ref={receiptInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           onChange={handleReceiptSelected}
+          aria-label="Foto del recibo"
           hidden
         />
-        <button type="button" onClick={() => labelInputRef.current?.click()} disabled={uploadingLabels !== null}>
-          {uploadingLabels ? `Subiendo ${uploadingLabels.done + 1}/${uploadingLabels.total}…` : 'Etiquetas'}
-        </button>
-        {/* No capture attribute, unlike Recibo: with it the phone goes
-            straight to the camera for a single shot, without it the picker
-            offers the camera too, plus choosing several photos taken
-            beforehand at once — see #134. */}
         <input
           ref={labelInputRef}
           type="file"
           accept="image/*"
           multiple
           onChange={handleLabelsSelected}
+          aria-label="Fotos de etiquetas"
           hidden
         />
-        <button
-          type="button"
-          className="button--primary"
-          onClick={() => setDialog({ kind: 'create' })}
-        >
-          Agregar producto
-        </button>
       </div>
+
+      {(scanningReceipt || uploadingLabels) && (
+        <p className="list-header__status" role="status">
+          {scanningReceipt
+            ? 'Leyendo recibo…'
+            : uploadingLabels && `Subiendo etiquetas ${uploadingLabels.done + 1}/${uploadingLabels.total}…`}
+        </p>
+      )}
 
       {receiptError && (
         <p className="form__error" role="alert">

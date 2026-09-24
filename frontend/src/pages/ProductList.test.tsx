@@ -89,6 +89,12 @@ function headingNames(): string[] {
     .map((heading) => heading.querySelector('.product-card__name-text')?.textContent ?? '')
 }
 
+/** Opens the create form through "+ Agregar" → "Un producto" — see #147. */
+async function openCreateForm() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Agregar' }))
+  fireEvent.click(screen.getByRole('button', { name: /^Un producto/ }))
+}
+
 /** Opens a product card's details, where Editar, Eliminar and the category
  *  live — see #140. The toggle's accessible name starts with the product's. */
 async function expandCard(name: string) {
@@ -195,7 +201,7 @@ describe('creating a product', () => {
     mockedCreate.mockResolvedValue(product())
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    await openCreateForm()
 
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
     fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
@@ -223,7 +229,7 @@ describe('creating a product', () => {
     mockedCreate.mockResolvedValue(product())
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    await openCreateForm()
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Sal' } })
     fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2027-01-01' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -246,7 +252,7 @@ describe('creating a product', () => {
     mockedCreate.mockRejectedValue(failure)
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    await openCreateForm()
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
     fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
@@ -411,11 +417,22 @@ describe('scanning a receipt', () => {
     })
 
     const { container } = render(<ProductList />)
-    await screen.findByRole('button', { name: 'Recibo' })
+    await screen.findByRole('button', { name: 'Agregar' })
     selectReceipt(container)
 
     await waitFor(() => expect(mockedUploadReceipt).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('Nopal limpio')).toBeInTheDocument()
+  })
+
+  it('says the receipt is being read while the upload runs — see #147', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedUploadReceipt.mockReturnValue(new Promise(() => {}))
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Agregar' })
+    selectReceipt(container)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Leyendo recibo…')
   })
 
   it('shows a readable error when the upload fails', async () => {
@@ -423,7 +440,7 @@ describe('scanning a receipt', () => {
     mockedUploadReceipt.mockRejectedValue(new Error('boom'))
 
     const { container } = render(<ProductList />)
-    await screen.findByRole('button', { name: 'Recibo' })
+    await screen.findByRole('button', { name: 'Agregar' })
     selectReceipt(container)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
@@ -474,7 +491,7 @@ describe('scanning a receipt', () => {
     })
 
     render(<ProductList />)
-    await screen.findByRole('button', { name: 'Recibo' })
+    await screen.findByRole('button', { name: 'Agregar' })
 
     expect(screen.queryByRole('button', { name: /recibo pendiente/i })).not.toBeInTheDocument()
   })
@@ -485,7 +502,7 @@ describe('the overlay', () => {
     mockedList.mockResolvedValue({ products: [], cachedAt: null })
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Agregar producto' }))
+    await openCreateForm()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -750,11 +767,11 @@ describe('queuing label photos', () => {
     mockedQueueLabelScan.mockResolvedValue(labelScan({ status: 'pending', name: null }))
 
     const { container } = render(<ProductList />)
-    await screen.findByRole('button', { name: 'Etiquetas' })
+    await screen.findByRole('button', { name: 'Agregar' })
     selectLabels(container, 3)
 
     await waitFor(() => expect(mockedQueueLabelScan).toHaveBeenCalledTimes(3))
-    expect(await screen.findByRole('button', { name: 'Etiquetas' })).toBeEnabled()
+    await waitFor(() => expect(screen.queryByText(/Subiendo etiquetas/)).not.toBeInTheDocument())
   })
 
   it('says how many photos failed to upload', async () => {
@@ -765,7 +782,7 @@ describe('queuing label photos', () => {
       .mockRejectedValueOnce(new Error('boom'))
 
     const { container } = render(<ProductList />)
-    await screen.findByRole('button', { name: 'Etiquetas' })
+    await screen.findByRole('button', { name: 'Agregar' })
     selectLabels(container, 3)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudieron subir 2 fotos.')
