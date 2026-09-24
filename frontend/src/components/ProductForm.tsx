@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
@@ -6,6 +6,7 @@ import { findDuplicateToday } from '@/duplicateCheck'
 import { LOCATION_LABELS, quantityLabel } from '@/labels'
 import { findNameSuggestion } from '@/nameSuggestions'
 import { canStepDown, stepQuantity } from '@/quantity'
+import { QUICK_DATES, quickDateValue } from '@/quickDates'
 import { toErrorMessage } from '@/services/api'
 import { lookupBarcode, rememberBarcode, scanBarcodePhoto } from '@/services/barcodesService'
 import { adjustProductQuantity, createProduct, replaceProduct } from '@/services/productsService'
@@ -137,6 +138,9 @@ export function ProductForm({
   const [duplicateWarning, setDuplicateWarning] = useState<Product | null>(null)
 
   const isEdit = product !== undefined
+  const scanBusy = scanning || barcodeScanning || barcodeLookupPending
+  const labelInputRef = useRef<HTMLInputElement>(null)
+  const barcodeInputRef = useRef<HTMLInputElement>(null)
 
   // Categories arrive asynchronously. Until they do, a select whose value has
   // no matching option falls back to "Sin categoría" — and saving in that
@@ -369,58 +373,66 @@ export function ProductForm({
             re-scanning over them is not a flow this covers. */}
         {!isEdit && (
           <div className="form__scan">
-            {/* Explicit htmlFor/id rather than wrapping in a <label>, same
-                reasoning as Cantidad below: a wrapping label's accessible
-                name is its full text content, and the status paragraphs
-                here change while scanning — wrapped, the label's name would
-                grow to include "Leyendo etiqueta…" while a scan is in
-                flight instead of naming the control. See #91's IconPicker
-                for the same fix, same reason. */}
-            <div className="form__field">
-              <label htmlFor="product-scan">Foto de la etiqueta (opcional)</label>
-              <input
-                id="product-scan"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleScan}
-                disabled={scanning || barcodeScanning || barcodeLookupPending}
-              />
-              {scanning && <p className="settings__hint">Leyendo etiqueta…</p>}
-              {scanError && (
-                <p className="form__error" role="alert">
-                  {scanError}
-                </p>
-              )}
-              {scanHint && <p className="settings__hint">{scanHint}</p>}
+            {/* Real buttons over hidden native inputs — see #142: the raw
+                file input rendered as "Choose File / No file chosen" and
+                took a third of a phone screen. Same pattern as Recibo on
+                the main screen. The inputs keep their own accessible names
+                for anything that drives them directly. */}
+            <div className="form__scan-buttons">
+              <button
+                type="button"
+                onClick={() => labelInputRef.current?.click()}
+                disabled={scanBusy}
+              >
+                <span aria-hidden="true">📷</span> {scanning ? 'Leyendo…' : 'Leer etiqueta'}
+              </button>
+              {/* A barcode never carries an expiry date — see #30 — so this
+                  only ever fills in name/quantity/unit, same partial-
+                  overwrite rule as the label photo. A native-camera photo,
+                  not a live video scan — see #132. */}
+              <button
+                type="button"
+                onClick={() => barcodeInputRef.current?.click()}
+                disabled={scanBusy}
+              >
+                <span aria-hidden="true">▦</span>{' '}
+                {barcodeScanning ? 'Leyendo…' : barcodeLookupPending ? 'Buscando…' : 'Leer código'}
+              </button>
             </div>
-
-            {/* A barcode never carries an expiry date — see #30 — so this
-                only ever fills in name/quantity/unit, same partial-
-                overwrite rule as the photo scan above. A native-camera
-                photo, same as the label field above it — see #132: the old
-                live in-browser video scan was unreliable across devices and
-                lighting, the same problem the label field never had because
-                it always worked this way. */}
-            <div className="form__field">
-              <label htmlFor="product-barcode-scan">Foto del código de barras (opcional)</label>
-              <input
-                id="product-barcode-scan"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleBarcodeScan}
-                disabled={scanning || barcodeScanning || barcodeLookupPending}
-              />
-              {barcodeScanning && <p className="settings__hint">Leyendo código de barras…</p>}
-              {barcodeLookupPending && <p className="settings__hint">Buscando producto…</p>}
-              {barcodeError && (
-                <p className="form__error" role="alert">
-                  {barcodeError}
-                </p>
-              )}
-              {barcodeHint && <p className="settings__hint">{barcodeHint}</p>}
-            </div>
+            <input
+              ref={labelInputRef}
+              id="product-scan"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleScan}
+              disabled={scanBusy}
+              aria-label="Foto de la etiqueta (opcional)"
+              hidden
+            />
+            <input
+              ref={barcodeInputRef}
+              id="product-barcode-scan"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleBarcodeScan}
+              disabled={scanBusy}
+              aria-label="Foto del código de barras (opcional)"
+              hidden
+            />
+            {scanError && (
+              <p className="form__error" role="alert">
+                {scanError}
+              </p>
+            )}
+            {scanHint && <p className="settings__hint">{scanHint}</p>}
+            {barcodeError && (
+              <p className="form__error" role="alert">
+                {barcodeError}
+              </p>
+            )}
+            {barcodeHint && <p className="settings__hint">{barcodeHint}</p>}
           </div>
         )}
 
@@ -449,15 +461,33 @@ export function ProductForm({
           )}
         </label>
 
-        <label className="form__field">
-          <span>Caduca el</span>
-          <input
-            type="date"
-            value={form.expires_at}
-            onChange={(event) => update('expires_at', event.target.value)}
-            required
-          />
-        </label>
+        <div className="form__date">
+          <label className="form__field">
+            <span>Caduca el</span>
+            <input
+              type="date"
+              value={form.expires_at}
+              onChange={(event) => update('expires_at', event.target.value)}
+              required
+            />
+          </label>
+          <div className="form__quick-dates" role="group" aria-label="Fechas rápidas">
+            {QUICK_DATES.map((quick) => {
+              const value = quickDateValue(quick)
+              return (
+                <button
+                  key={quick.label}
+                  type="button"
+                  className="chip"
+                  aria-pressed={form.expires_at === value}
+                  onClick={() => update('expires_at', value)}
+                >
+                  {quick.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <label className="form__field">
           <span>Dónde está</span>
@@ -563,49 +593,55 @@ export function ProductForm({
           </p>
         )}
 
-        {/* Replaces the normal actions rather than sitting above them —
-            Guardar going through again would just re-run into the same
-            duplicate, so the three explicit choices are the only way
-            forward from here. See #108. */}
-        {duplicateWarning ? (
-          <div className="form__duplicate-warning" role="alert">
-            <p>
-              Ya agregaste "{duplicateWarning.name}" hoy ({quantityLabel(duplicateWarning.quantity, duplicateWarning.unit)}
-              ). ¿Qué quieres hacer?
-            </p>
+        {/* Pinned to the bottom of the sheet — see #142: Guardar used to
+            sit below the fold on a phone, a scroll before every save. The
+            duplicate warning lives here too, since it's what Guardar just
+            turned into and must be just as visible. */}
+        <div className="form__footer">
+          {/* Replaces the normal actions rather than sitting above them —
+              Guardar going through again would just re-run into the same
+              duplicate, so the three explicit choices are the only way
+              forward from here. See #108. */}
+          {duplicateWarning ? (
+            <div className="form__duplicate-warning" role="alert">
+              <p>
+                Ya agregaste "{duplicateWarning.name}" hoy ({quantityLabel(duplicateWarning.quantity, duplicateWarning.unit)}
+                ). ¿Qué quieres hacer?
+              </p>
+              <div className="form__actions">
+                <button type="button" onClick={onCancel} disabled={saving}>
+                  Omitir
+                </button>
+                <button type="button" onClick={handleMergeIntoExisting} disabled={saving}>
+                  Sumar a la cantidad existente
+                </button>
+                <button type="button" className="button--primary" onClick={handleAddAnyway} disabled={saving}>
+                  Agregar de todas formas
+                </button>
+              </div>
+            </div>
+          ) : (
             <div className="form__actions">
               <button type="button" onClick={onCancel} disabled={saving}>
-                Omitir
+                Cancelar
               </button>
-              <button type="button" onClick={handleMergeIntoExisting} disabled={saving}>
-                Sumar a la cantidad existente
-              </button>
-              <button type="button" className="button--primary" onClick={handleAddAnyway} disabled={saving}>
-                Agregar de todas formas
+              <button type="submit" className="button--primary" disabled={saving}>
+                {saving ? (
+                  <>
+                    {/* Stays up across the whole retry sequence, because `saving`
+                        is only cleared once withRetry settles. A dropped
+                        connection is exactly when a still-disabled button with no
+                        motion reads as a hang. */}
+                    <span className="spinner" aria-hidden="true" />
+                    Guardando…
+                  </>
+                ) : (
+                  'Guardar'
+                )}
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="form__actions">
-            <button type="button" onClick={onCancel} disabled={saving}>
-              Cancelar
-            </button>
-            <button type="submit" className="button--primary" disabled={saving}>
-              {saving ? (
-                <>
-                  {/* Stays up across the whole retry sequence, because `saving`
-                      is only cleared once withRetry settles. A dropped
-                      connection is exactly when a still-disabled button with no
-                      motion reads as a hang. */}
-                  <span className="spinner" aria-hidden="true" />
-                  Guardando…
-                </>
-              ) : (
-                'Guardar'
-              )}
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </form>
     </Modal>
   )
