@@ -140,7 +140,7 @@ def resolve_scan(scan_id: int, payload: LabelScanResolve, db: Session = Depends(
     if db.get(Product, payload.product_id) is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Product {payload.product_id} does not exist",
+            detail="Ese producto ya no existe. Elige otro.",
         )
 
     _resolve(scan, payload.product_id)

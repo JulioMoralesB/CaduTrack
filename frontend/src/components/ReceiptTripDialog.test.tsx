@@ -260,31 +260,17 @@ describe('ReceiptTripDialog manual link to existing product', () => {
     expect(screen.queryByRole('button', { name: 'Vincular a producto existente' })).not.toBeInTheDocument()
   })
 
-  it('keeps Confirmar disabled until a product is chosen', () => {
-    const existing = product({ id: 9, name: 'Leche entera' })
-    renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
-    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
-
-    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled()
-
-    fireEvent.change(screen.getByLabelText('Vincular Nopal limpio a un producto existente'), {
-      target: { value: '9' },
-    })
-
-    expect(screen.getByRole('button', { name: 'Confirmar' })).not.toBeDisabled()
-  })
-
-  it('resolves to the chosen product on confirm', async () => {
+  it('links as soon as a product is chosen, with no second confirmation — see #155', async () => {
     const existing = product({ id: 9, name: 'Leche entera' })
     mockedResolve.mockResolvedValue(tripItem({ id: 1, resolved_at: '2026-09-01T00:00:00Z', product_id: 9 }))
     const { onTripChanged } = renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
     fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+
     fireEvent.change(screen.getByLabelText('Vincular Nopal limpio a un producto existente'), {
       target: { value: '9' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
-
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument()
     await waitFor(() => expect(mockedResolve).toHaveBeenCalledWith(1, 1, 9))
     expect(mockedCreate).not.toHaveBeenCalled()
     expect(onTripChanged).toHaveBeenCalled()
@@ -295,29 +281,30 @@ describe('ReceiptTripDialog manual link to existing product', () => {
     const existing = product({ id: 9, name: 'Leche entera' })
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
     fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
-    fireEvent.change(screen.getByLabelText('Vincular Nopal limpio a un producto existente'), {
-      target: { value: '9' },
-    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar vínculo' }))
 
-    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Vincular Nopal limpio a un producto existente')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Vincular a producto existente' })).toBeInTheDocument()
     expect(mockedResolve).not.toHaveBeenCalled()
   })
 
-  it('shows the error and leaves the item in place when the manual link fails', async () => {
+  it('shows a failed link on its own line and leaves the item in place — see #155', async () => {
     const existing = product({ id: 9, name: 'Leche entera' })
     mockedResolve.mockRejectedValue(new Error('nope'))
-    renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
-    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+    renderDialog(
+      { items: [tripItem({ id: 1, name: 'Nopal limpio' }), tripItem({ id: 2, name: 'Plátano' })] },
+      [existing],
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Vincular a producto existente' })[0])
+
     fireEvent.change(screen.getByLabelText('Vincular Nopal limpio a un producto existente'), {
       target: { value: '9' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(alert.closest('li')).toHaveTextContent('Nopal limpio')
     expect(screen.getByText('Nopal limpio')).toBeInTheDocument()
   })
 })
