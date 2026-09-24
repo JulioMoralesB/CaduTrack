@@ -58,7 +58,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.875rem 1rem;
+  padding: 0.5rem 0.75rem 0.5rem 0.5rem;
   background: var(--surface);
   border: 1px solid var(--border);
   /* The status stripe is the fastest thing to scan down a long list. */
@@ -84,20 +84,76 @@
   border-left-color: var(--status-color, var(--border));
 }
 
-.product-card__name {
+/* Compact row — see #140: icon, the name/summary toggle, and Consumido. */
+.product-card__row {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.25rem;
+}
+
+.product-card__name {
+  flex: 1;
+  min-width: 0;
   font-size: 1rem;
   font-weight: 600;
 }
 
+/* The whole middle of the card is the tap target that expands it. */
+.product-card__toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.25rem 0.25rem 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.product-card__toggle:hover {
+  /* The global button:hover border would be invisible on a borderless
+     button, same as the icon button below. */
+  background: none;
+}
+
+.product-card__name-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.product-card__summary {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+/* A value like "0.5 kg" never splits across lines. */
+.product-card__summary > span {
+  white-space: nowrap;
+}
+
+.product-card__consume {
+  flex-shrink: 0;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
 .product-card__icon-button {
-  /* Measured at 22x20px with padding: 0 — the smallest tappable control
-     in the app, on a row that's tapped standing at the fridge. The emoji
-     itself stays the same visual size (font-size unchanged); this just
-     grows the hit area around it. */
-  padding: 0.5rem;
+  /* 44x44 — a row that's tapped standing at the fridge. The emoji itself
+     stays the same visual size; this only grows the hit area around it. */
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
   border: none;
   background: none;
   font-size: 1.25rem;
@@ -159,6 +215,14 @@
   text-align: center;
 }
 
+/* Expanded details, indented to line up under the name. */
+.product-card__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-left: 3rem;
+}
+
 .product-card__meta {
   display: flex;
   flex-wrap: wrap;
@@ -177,7 +241,7 @@
 }
 
 .product-card__expiry {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   /* Colour reinforces the wording, it does not replace it — "Caducó hace 2
      días" still reads correctly to anyone who cannot distinguish the hues. */
@@ -201,8 +265,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  /* 44x44, the minimum comfortable tap target — was 28px, right next to
+     the value it changes. */
+  width: 2.75rem;
+  height: 2.75rem;
   padding: 0;
   font-size: 1rem;
   line-height: 1;
@@ -242,18 +308,6 @@
   .app {
     padding: 2rem 1.5rem 4rem;
   }
-
-  .product-card {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .product-card__expiry {
-    text-align: right;
-    white-space: nowrap;
-  }
 }
 
 /* Just the two content-creation actions now — Historial and Ajustes moved
@@ -270,15 +324,22 @@
   flex: 1;
 }
 
-.product-card__side {
+.product-card__actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
-.product-card__actions {
-  display: flex;
-  gap: 0.5rem;
+.product-card__actions > button {
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  font-size: 0.8125rem;
+}
+
+/* Pushes Editar/Eliminar to the right of the stepper. */
+.product-card__actions .quantity-stepper {
+  margin-right: auto;
 }
 
 .button--icon {
@@ -435,10 +496,6 @@
 
   .modal__panel {
     border-radius: 1rem;
-  }
-
-  .product-card__side {
-    align-items: flex-end;
   }
 }
 

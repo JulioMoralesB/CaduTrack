@@ -58,11 +58,18 @@ function renderCard(overrides: Partial<Product> = {}) {
   return { onProductChanged, onConsumed }
 }
 
+/** Opens the card's details, where the stepper, Editar and Eliminar live —
+ *  see #140. */
+function expand() {
+  fireEvent.click(screen.getByRole('button', { expanded: false }))
+}
+
 describe('ProductCard quantity stepper', () => {
   it('sends +1 and reports the server response back to the list', async () => {
     const updated = product({ quantity: '4.00' })
     mockedAdjust.mockResolvedValue(updated)
     const { onProductChanged } = renderCard({ quantity: '3.00' })
+    expand()
 
     screen.getByRole('button', { name: 'Aumentar cantidad de Plátano' }).click()
 
@@ -73,6 +80,7 @@ describe('ProductCard quantity stepper', () => {
   it('sends -1 from the "−" button', async () => {
     mockedAdjust.mockResolvedValue(product({ quantity: '2.00' }))
     renderCard({ quantity: '3.00' })
+    expand()
 
     screen.getByRole('button', { name: 'Reducir cantidad de Plátano' }).click()
 
@@ -81,6 +89,7 @@ describe('ProductCard quantity stepper', () => {
 
   it('hides "−" at quantity 1 rather than disabling it, offering no path to zero', () => {
     renderCard({ quantity: '1.00' })
+    expand()
 
     expect(screen.queryByRole('button', { name: 'Reducir cantidad de Plátano' })).not.toBeInTheDocument()
     expect(mockedAdjust).not.toHaveBeenCalled()
@@ -88,12 +97,14 @@ describe('ProductCard quantity stepper', () => {
 
   it('shows "−" again once the quantity is above 1', () => {
     renderCard({ quantity: '2.00' })
+    expand()
 
     expect(screen.getByRole('button', { name: 'Reducir cantidad de Plátano' })).toBeInTheDocument()
   })
 
   it('keeps "+" enabled at quantity 1 — there is no upper bound', () => {
     renderCard({ quantity: '1.00' })
+    expand()
 
     expect(screen.getByRole('button', { name: 'Aumentar cantidad de Plátano' })).toBeEnabled()
   })
@@ -106,6 +117,7 @@ describe('ProductCard quantity stepper', () => {
       }),
     )
     renderCard({ quantity: '3.00' })
+    expand()
 
     screen.getByRole('button', { name: 'Aumentar cantidad de Plátano' }).click()
 
@@ -119,12 +131,13 @@ describe('ProductCard quantity stepper', () => {
   it('shows the failure inline and leaves the displayed quantity untouched', async () => {
     mockedAdjust.mockRejectedValue(new Error('nope'))
     const { onProductChanged } = renderCard({ quantity: '3.00' })
+    expand()
 
     screen.getByRole('button', { name: 'Aumentar cantidad de Plátano' }).click()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(onProductChanged).not.toHaveBeenCalled()
-    expect(screen.getByText('3 piezas')).toBeInTheDocument()
+    expect(screen.getByText('3 piezas', { selector: '.quantity-stepper__value' })).toBeInTheDocument()
   })
 })
 
@@ -319,5 +332,68 @@ describe('ProductCard consume action', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(onConsumed).not.toHaveBeenCalled()
+  })
+})
+
+describe('ProductCard compact layout — see #140', () => {
+  it('shows name, expiry, quantity and location without expanding', () => {
+    renderCard({ quantity: '3.00', unit: 'piezas', location: 'pantry', days_until_expiry: 5 })
+
+    expect(screen.getByText('Plátano')).toBeInTheDocument()
+    expect(screen.getByText('Caduca en 5 días')).toBeInTheDocument()
+    expect(screen.getByText('3 piezas')).toBeInTheDocument()
+    expect(screen.getByText('Alacena')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /marcar plátano como consumido/i })).toBeInTheDocument()
+  })
+
+  it('keeps the stepper, Editar and Eliminar out of the way until expanded', () => {
+    renderCard()
+
+    expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Editar Plátano' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Eliminar Plátano' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Aumentar cantidad de Plátano' })).not.toBeInTheDocument()
+  })
+
+  it('expands to show category, notes and every action, and collapses again', () => {
+    renderCard({ category: { id: 3, name: 'Frutas', created_at: '2026-08-29T00:00:00Z' }, notes: 'maduros' })
+
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+
+    expect(screen.getByRole('button', { expanded: true })).toBeInTheDocument()
+    expect(screen.getByText('Frutas')).toBeInTheDocument()
+    expect(screen.getByText('maduros')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar Plátano' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Eliminar Plátano' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { expanded: true }))
+
+    expect(screen.queryByRole('button', { name: 'Editar Plátano' })).not.toBeInTheDocument()
+  })
+
+  it('names a missing category instead of leaving a gap', () => {
+    renderCard({ category: null })
+
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+
+    expect(screen.getByText('Sin categoría')).toBeInTheDocument()
+  })
+
+  it('hands Editar and Eliminar the product', () => {
+    const onEdit = vi.fn()
+    const onDelete = vi.fn()
+    const target = product()
+    render(
+      <ul>
+        <ProductCard product={target} onEdit={onEdit} onDelete={onDelete} onProductChanged={vi.fn()} onConsumed={vi.fn()} />
+      </ul>,
+    )
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Plátano' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar Plátano' }))
+
+    expect(onEdit).toHaveBeenCalledWith(target)
+    expect(onDelete).toHaveBeenCalledWith(target)
   })
 })

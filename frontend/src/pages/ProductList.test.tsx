@@ -89,6 +89,12 @@ function headingNames(): string[] {
     .map((heading) => heading.querySelector('.product-card__name-text')?.textContent ?? '')
 }
 
+/** Opens a product card's details, where Editar, Eliminar and the category
+ *  live — see #140. The toggle's accessible name starts with the product's. */
+async function expandCard(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${name}`), expanded: false }))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockedCategories.mockResolvedValue([
@@ -143,8 +149,9 @@ describe('ProductList', () => {
     mockedList.mockResolvedValue({ products: [product({ category: null })], cachedAt: null })
 
     render(<ProductList />)
+    await expandCard('Leche entera')
 
-    expect(await screen.findByText('Sin categoría')).toBeInTheDocument()
+    expect(screen.getByText('Sin categoría')).toBeInTheDocument()
   })
 
   it('invites the user to start when there is nothing yet', async () => {
@@ -264,7 +271,8 @@ describe('editing a product', () => {
     mockedReplace.mockResolvedValue(existing)
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar Yogur griego' }))
+    await expandCard('Yogur griego')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Yogur griego' }))
 
     // Scoped to the dialog: the filter bar behind it also has a "Categoría" control.
     const form = within(screen.getByRole('dialog'))
@@ -287,7 +295,8 @@ describe('deleting a product', () => {
     mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Leche entera' }))
+    await expandCard('Leche entera')
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar Leche entera' }))
 
     expect(screen.getByText(/¿Seguro que quieres eliminar "Leche entera"\?/)).toBeInTheDocument()
 
@@ -302,7 +311,8 @@ describe('deleting a product', () => {
     mockedDelete.mockResolvedValue(undefined)
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Leche entera' }))
+    await expandCard('Leche entera')
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar Leche entera' }))
     // Exactly "Eliminar" — the card's button is labelled "Eliminar Leche entera".
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
 
