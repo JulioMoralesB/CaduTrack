@@ -15,6 +15,8 @@ export interface ProductFilters {
   categoryId: number | 'all'
   location: Location | 'all'
   status: ExpiryStatus | 'all'
+  /** Free text matched against the name — see #141. Empty matches all. */
+  query: string
 }
 
 export type SortKey = 'expiry' | 'name'
@@ -23,16 +25,29 @@ export const NO_FILTERS: ProductFilters = {
   categoryId: 'all',
   location: 'all',
   status: 'all',
+  query: '',
+}
+
+/** Case- and accent-insensitive: "platano" finds "Plátano", "JAMON" finds
+ *  "jamón" — typing accents on a phone keyboard is exactly what nobody
+ *  does in a search box. */
+export function normalizeForSearch(text: string): string {
+  return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 }
 
 export function hasActiveFilters(filters: ProductFilters): boolean {
   return (
-    filters.categoryId !== 'all' || filters.location !== 'all' || filters.status !== 'all'
+    filters.categoryId !== 'all' ||
+    filters.location !== 'all' ||
+    filters.status !== 'all' ||
+    filters.query.trim() !== ''
   )
 }
 
 export function applyFilters(products: Product[], filters: ProductFilters): Product[] {
+  const query = normalizeForSearch(filters.query)
   return products.filter((product) => {
+    if (query !== '' && !normalizeForSearch(product.name).includes(query)) return false
     if (filters.categoryId !== 'all' && product.category_id !== filters.categoryId) return false
     if (filters.location !== 'all' && product.location !== filters.location) return false
     if (filters.status !== 'all' && product.status !== filters.status) return false

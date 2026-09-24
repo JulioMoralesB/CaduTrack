@@ -374,6 +374,7 @@ export function ProductList() {
             filters={filters}
             sort={sort}
             categories={categories}
+            products={products}
             shown={visible.length}
             total={products.length}
             onChange={setFilters}
