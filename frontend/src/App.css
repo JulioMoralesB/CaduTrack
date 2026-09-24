@@ -1152,3 +1152,8 @@
 .toast__action {
   text-decoration: underline;
 }
+
+/* A destructive action set apart from Cancelar/Continuar on the right. */
+.form__actions-start {
+  margin-right: auto;
+}

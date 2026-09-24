@@ -32,3 +32,9 @@ export function quantityLabel(quantity: string, unit: string | null): string {
   const amount = quantity.includes('.') ? quantity.replace(/0+$/, '').replace(/\.$/, '') : quantity
   return unit ? `${amount} ${unit}` : amount
 }
+
+/** "22 sep" — a timestamp as the device's own calendar day, for telling
+ *  one receipt from another at a glance. See #153. */
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+}

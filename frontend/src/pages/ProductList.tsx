@@ -21,6 +21,7 @@ import {
   type SortKey,
 } from '@/filters'
 import { useCategories } from '@/hooks/useCategories'
+import { shortDate } from '@/labels'
 import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
 import { apiUrl, toErrorMessage } from '@/services/api'
@@ -51,7 +52,10 @@ type Dialog =
   | { kind: 'delete'; product: Product }
   | { kind: 'settings' }
   | { kind: 'history' }
-  | { kind: 'trip' }
+  // The trip the dialog was opened with, kept for as long as it's open —
+  // see #153: currentTrip can switch to a different, older trip the moment
+  // this one's last line is resolved.
+  | { kind: 'trip'; trip: ShoppingTrip }
   | { kind: 'labels' }
 
 /** Main screen: everything in the house, soonest to expire first. */
@@ -76,6 +80,7 @@ export function ProductList() {
   const [lastConsumed, setLastConsumed] = useState<Product | null>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
   const labelsReading = labelScans.some((scan) => scan.status === 'pending')
+  const pendingTripCount = currentTrip?.items.filter((item) => item.resolved_at === null).length ?? 0
 
   const visible = useMemo(
     () => sortProducts(applyFilters(products, filters), sort),
@@ -207,7 +212,7 @@ export function ProductList() {
       try {
         const trip = await uploadReceipt(await downscaleImage(file))
         setCurrentTrip(trip)
-        setDialog({ kind: 'trip' })
+        setDialog({ kind: 'trip', trip })
       } catch (caught) {
         setReceiptError(toErrorMessage(caught))
       } finally {
@@ -337,11 +342,11 @@ export function ProductList() {
         </button>
       )}
 
-      {dialog.kind !== 'trip' && currentTrip && currentTrip.items.some((item) => item.resolved_at === null) && (
-        <button type="button" className="trip-banner" onClick={() => setDialog({ kind: 'trip' })}>
-          Recibo pendiente: {currentTrip.items.filter((item) => item.resolved_at === null).length} producto
-          {currentTrip.items.filter((item) => item.resolved_at === null).length === 1 ? '' : 's'} por revisar —
-          continuar
+      {dialog.kind !== 'trip' && currentTrip && pendingTripCount > 0 && (
+        <button type="button" className="trip-banner" onClick={() => setDialog({ kind: 'trip', trip: currentTrip })}>
+          {/* The date tells apart two scans of the same ticket — see #153. */}
+          Recibo pendiente ({shortDate(currentTrip.created_at)}): {pendingTripCount} producto
+          {pendingTripCount === 1 ? '' : 's'} por revisar — continuar
         </button>
       )}
 
@@ -450,9 +455,10 @@ export function ProductList() {
 
       {dialog.kind === 'history' && <ProductHistory onClose={close} onRestored={reload} />}
 
-      {dialog.kind === 'trip' && currentTrip && (
+      {dialog.kind === 'trip' && (
         <ReceiptTripDialog
-          trip={currentTrip}
+          key={dialog.trip.id}
+          trip={dialog.trip}
           categories={categories}
           products={products}
           nameSuggestions={nameSuggestions}

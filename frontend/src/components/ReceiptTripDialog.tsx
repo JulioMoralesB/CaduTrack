@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/Modal'
 import { ProductForm } from '@/components/ProductForm'
 import { findDuplicateToday } from '@/duplicateCheck'
-import { quantityLabel } from '@/labels'
+import { quantityLabel, shortDate } from '@/labels'
 import { toErrorMessage } from '@/services/api'
 import { dropTripItem, resolveTripItem } from '@/services/tripsService'
 import type { Category, Product, ProductNameSuggestion, ShoppingTrip, ShoppingTripItem } from '@/services/types'
@@ -81,8 +81,13 @@ export function ReceiptTripDialog({
   // for everything else (a different day, a name that doesn't match).
   const [manualLinkFor, setManualLinkFor] = useState<number | null>(null)
   const [manualLinkProductId, setManualLinkProductId] = useState('')
+  // Two-step, so a whole receipt is never dropped by one stray tap — see
+  // #153.
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false)
 
   const pending = items.filter((item) => itemState(item) === 'pending')
+  // Dated, so two scans of the same ticket can be told apart — see #153.
+  const title = `Recibo del ${shortDate(trip.created_at)}`
   // Sorted once, not per row — nothing about this list depends on which
   // item's picker is open.
   const activeProducts = [...products]
@@ -109,6 +114,25 @@ export function ReceiptTripDialog({
 
         const toAdd = pending.filter((item) => ticked[item.id])
         setQueue(toAdd)
+      } catch (caught) {
+        setError(toErrorMessage(caught))
+      } finally {
+        setSubmitting(false)
+      }
+    })()
+  }
+
+  /** Drops every line still pending — a duplicate scan of a ticket already
+   *  dealt with, or one not worth finishing. See #153. */
+  const handleDiscard = () => {
+    setSubmitting(true)
+    setError(null)
+    void (async () => {
+      try {
+        const dropped = await Promise.all(pending.map((item) => dropTripItem(trip.id, item.id)))
+        dropped.forEach(replaceItem)
+        setConfirmingDiscard(false)
+        onTripChanged()
       } catch (caught) {
         setError(toErrorMessage(caught))
       } finally {
@@ -214,7 +238,7 @@ export function ReceiptTripDialog({
     // skipped. Skipped items are still pending, so pending.length here
     // only reaches 0 when every line was truly dealt with.
     return (
-      <Modal title="Recibo" onClose={onClose}>
+      <Modal title={title} onClose={onClose}>
         <p className="state state--empty">
           {pending.length === 0
             ? 'Listo — se procesó todo el recibo.'
@@ -234,7 +258,7 @@ export function ReceiptTripDialog({
   }
 
   return (
-    <Modal title="Recibo" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       {trip.reconciled === false && (
         <p className="form__error" role="alert">
           La suma de cantidades ({trip.counted_quantity}) no coincide con el total del recibo (
@@ -340,18 +364,46 @@ export function ReceiptTripDialog({
         </p>
       )}
 
-      <div className="form__actions">
-        {/* "Cancelar", not "Cerrar": the modal's own × close button already
-            carries that label — see the done screen's own note. */}
-        <button type="button" onClick={onClose} disabled={submitting}>
-          Cancelar
-        </button>
-        {pending.length > 0 && (
-          <button type="button" className="button--primary" onClick={handleContinue} disabled={submitting}>
-            {submitting ? 'Procesando…' : 'Continuar'}
+      {confirmingDiscard ? (
+        <div className="form__duplicate-warning" role="alert">
+          <p>
+            ¿Descartar {pending.length === 1 ? 'el producto que falta' : `los ${pending.length} productos que faltan`}? No
+            se agrega nada a tu lista.
+          </p>
+          <div className="form__actions">
+            <button type="button" onClick={() => setConfirmingDiscard(false)} disabled={submitting}>
+              Volver
+            </button>
+            <button type="button" className="button--danger" onClick={handleDiscard} disabled={submitting}>
+              {submitting ? 'Descartando…' : 'Sí, descartar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="form__actions">
+          {pending.length > 0 && (
+            <button
+              type="button"
+              className="button--danger-text form__actions-start"
+              onClick={() => setConfirmingDiscard(true)}
+              disabled={submitting}
+            >
+              Descartar recibo
+            </button>
+          )}
+          {/* "Cancelar", not "Cerrar": the modal's own × close button already
+              carries that label — see the done screen's own note. Once nothing
+              is left there's nothing to cancel, so it becomes "Entendido". */}
+          <button type="button" onClick={onClose} disabled={submitting}>
+            {pending.length > 0 ? 'Cancelar' : 'Entendido'}
           </button>
-        )}
-      </div>
+          {pending.length > 0 && (
+            <button type="button" className="button--primary" onClick={handleContinue} disabled={submitting}>
+              {submitting ? 'Procesando…' : 'Continuar'}
+            </button>
+          )}
+        </div>
+      )}
     </Modal>
   )
 }
