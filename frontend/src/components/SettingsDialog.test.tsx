@@ -46,7 +46,15 @@ function reassignment(overrides: Partial<IconReassignmentResult> = {}): IconReas
 function renderDialog(overrides: { onClose?: () => void; onIconsReassigned?: () => void } = {}) {
   const onClose = overrides.onClose ?? vi.fn()
   const onIconsReassigned = overrides.onIconsReassigned ?? vi.fn()
-  render(<SettingsDialog onClose={onClose} onIconsReassigned={onIconsReassigned} />)
+  render(
+    <SettingsDialog
+      categories={[]}
+      products={[]}
+      onClose={onClose}
+      onIconsReassigned={onIconsReassigned}
+      onCategoriesChanged={vi.fn()}
+    />,
+  )
   return { onClose, onIconsReassigned }
 }
 
@@ -235,7 +243,7 @@ describe('SettingsDialog', () => {
   it('never renders anything that looks like a token', async () => {
     mockedGet.mockResolvedValue(response())
 
-    const { container } = render(<SettingsDialog onClose={vi.fn()} onIconsReassigned={vi.fn()} />)
+    const { container } = render(<SettingsDialog categories={[]} products={[]} onClose={vi.fn()} onIconsReassigned={vi.fn()} onCategoriesChanged={vi.fn()} />)
     await screen.findByLabelText('Hora')
 
     // The API does not send it; the UI must not invent a field for it either.

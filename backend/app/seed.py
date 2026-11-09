@@ -1,8 +1,9 @@
 """Seed the default category list.
 
-Idempotent: running it repeatedly inserts nothing new, so it is safe to call on
-every deploy. Categories the user has since renamed or deleted are left alone —
-only names that are absent get inserted.
+Idempotent: only an empty table is seeded, so it is safe to call on every
+deploy. Categories can be renamed and deleted from the app (#144), so a default
+that's missing may be missing on purpose: inserting it again would bring back
+"Snacks" on every deploy after someone renamed it "Botanas".
 
 Run it after applying migrations:
 
@@ -12,6 +13,7 @@ Run it after applying migrations:
 
 import logging
 
+from sqlalchemy import exists, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -42,11 +44,16 @@ DEFAULT_CATEGORIES: tuple[str, ...] = (
 
 
 def seed_categories(session: Session) -> int:
-    """Insert any missing default categories and return how many were added.
+    """Insert the default categories into an empty table and return how many
+    were added.
 
-    Uses ON CONFLICT DO NOTHING against the unique name constraint rather than
-    a read-then-write, so concurrent runs cannot race each other into an error.
+    ON CONFLICT DO NOTHING as well as the emptiness check, so two runs racing
+    on a fresh database cannot collide into an error.
     """
+    if session.scalar(select(exists().where(Category.id.is_not(None)))):
+        logger.info("Categories already present, nothing to seed")
+        return 0
+
     statement = (
         insert(Category)
         .values([{"name": name} for name in DEFAULT_CATEGORIES])
@@ -56,11 +63,7 @@ def seed_categories(session: Session) -> int:
     inserted = session.execute(statement).scalars().all()
     session.commit()
 
-    if inserted:
-        logger.info("Seeded %d default categories: %s", len(inserted), ", ".join(inserted))
-    else:
-        logger.info("Default categories already present, nothing to seed")
-
+    logger.info("Seeded %d default categories: %s", len(inserted), ", ".join(inserted))
     return len(inserted)
 
 

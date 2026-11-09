@@ -45,7 +45,7 @@ def _validate_category(db: Session, category_id: int | None) -> None:
     if db.get(Category, category_id) is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Category {category_id} does not exist",
+            detail="Esa categoría ya no existe. Elige otra.",
         )
 
 

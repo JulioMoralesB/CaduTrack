@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { CategoryManager } from '@/components/CategoryManager'
 import { Modal } from '@/components/Modal'
 import { ThemePicker } from '@/components/ThemePicker'
 import { useAutosave } from '@/hooks/useAutosave'
 import { toErrorMessage } from '@/services/api'
 import { reassignIcons } from '@/services/productsService'
 import { getSettings, saveIconSettings, saveSettings, triggerAlert } from '@/services/settingsService'
-import type { AlertSettingsPayload, IconSettingsPayload, SettingsResponse } from '@/services/types'
+import type { AlertSettingsPayload, Category, IconSettingsPayload, Product, SettingsResponse } from '@/services/types'
 import { APP_VERSION } from '@/version'
 
 interface SettingsDialogProps {
+  categories: Category[]
+  /** The active product list, to say what deleting a category would touch. */
+  products: Product[]
   onClose: () => void
   /** Called once after a successful icon reassignment, so the product list
    *  behind the dialog picks up the new icons instead of showing stale ones
    *  until something else happens to trigger a reload. */
   onIconsReassigned: () => void
+  /** Called after any category change, with the id if one was deleted. */
+  onCategoriesChanged: (deletedId?: number) => Promise<void>
 }
 
 /**
@@ -76,7 +82,13 @@ function validateAlerts(
  *  and close without saving. Two backend resources (see PUT /settings and
  *  PUT /settings/icons), each with its own autosave, so neither ever has to
  *  resend the other's values. */
-export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogProps) {
+export function SettingsDialog({
+  categories,
+  products,
+  onClose,
+  onIconsReassigned,
+  onCategoriesChanged,
+}: SettingsDialogProps) {
   const [current, setCurrent] = useState<SettingsResponse | null>(null)
   const [enabled, setEnabled] = useState(true)
   const [alertTime, setAlertTime] = useState('08:00')
@@ -196,10 +208,6 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
 
   const version = versionSummary(current?.backend_version)
 
-  const versionLine = (
-    <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
-  )
-
   const saveError = alerts.error ?? icons.error
   const saving = alerts.status === 'saving' || icons.status === 'saving'
   const saved = alerts.status === 'saved' || icons.status === 'saved'
@@ -275,39 +283,14 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
           </p>
           {reassignResult && <p className="settings__hint">{reassignResult}</p>}
 
+          <CategoryManager categories={categories} products={products} onChanged={onCategoriesChanged} />
+
           {error && (
             <p className="form__error" role="alert">
               {error}
             </p>
           )}
           {testResult && <p className="settings__hint">{testResult}</p>}
-
-          {versionLine}
-
-          {/* Pinned, the same as ProductForm's — see #142: this sheet is far
-              taller than a phone screen, and whether a change saved has to be
-              visible from wherever it was made. */}
-          <div className="form__footer">
-            {saveError ? (
-              <p className="form__error" role="alert">
-                No se guardó: {saveError}
-                {closeBlocked && ' Cierra otra vez para salir sin guardar.'}
-              </p>
-            ) : (
-              <p className="settings__save-status" role="status">
-                {saving ? 'Guardando…' : saved ? 'Guardado' : ''}
-              </p>
-            )}
-            <div className="form__actions">
-              <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
-                {testing ? 'Enviando…' : 'Enviar prueba'}
-              </button>
-              {/* Not "Cerrar": the modal's own × already carries that name. */}
-              <button type="button" className="button--primary" onClick={handleClose}>
-                Listo
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -317,7 +300,35 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
         </p>
       )}
 
-      {current === null && versionLine}
+      {/* Always here, loaded or not, so it's never torn down and recreated. */}
+      <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
+
+      {/* Pinned, the same as ProductForm's — see #142: this sheet is far
+          taller than a phone screen, and whether a change saved has to be
+          visible from wherever it was made. */}
+      {current !== null && (
+        <div className="form__footer">
+          {saveError ? (
+            <p className="form__error" role="alert">
+              No se guardó: {saveError}
+              {closeBlocked && ' Cierra otra vez para salir sin guardar.'}
+            </p>
+          ) : (
+            <p className="settings__save-status" role="status">
+              {saving ? 'Guardando…' : saved ? 'Guardado' : ''}
+            </p>
+          )}
+          <div className="form__actions">
+            <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
+              {testing ? 'Enviando…' : 'Enviar prueba'}
+            </button>
+            {/* Not "Cerrar": the modal's own × already carries that name. */}
+            <button type="button" className="button--primary" onClick={handleClose}>
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
     </Modal>
   )
 }
