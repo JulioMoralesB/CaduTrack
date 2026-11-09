@@ -18,14 +18,17 @@ _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 @router.post("/label", response_model=LabelExtraction)
-async def extract_label_from_photo(image: UploadFile = File(...)) -> LabelExtraction:
+def extract_label_from_photo(image: UploadFile = File(...)) -> LabelExtraction:
     """Read a name, expiry date, and weight from a photo of a product label.
 
     Side-effect free by design: nothing here touches the database. The
     result is meant to pre-fill the product form for the user to confirm or
     correct — see #83's acceptance criteria — never to be saved on its own.
     """
-    contents = await image.read()
+    # A plain def, not async: FastAPI runs it on a worker thread. This waits
+    # on the vision model, and on the event loop that would freeze every other
+    # request for as long as it takes — see #162.
+    contents = image.file.read()
     if not contents:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="La imagen está vacía")
     if len(contents) > _MAX_IMAGE_BYTES:
