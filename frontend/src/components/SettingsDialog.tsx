@@ -208,10 +208,6 @@ export function SettingsDialog({
 
   const version = versionSummary(current?.backend_version)
 
-  const versionLine = (
-    <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
-  )
-
   const saveError = alerts.error ?? icons.error
   const saving = alerts.status === 'saving' || icons.status === 'saving'
   const saved = alerts.status === 'saved' || icons.status === 'saved'
@@ -295,33 +291,6 @@ export function SettingsDialog({
             </p>
           )}
           {testResult && <p className="settings__hint">{testResult}</p>}
-
-          {versionLine}
-
-          {/* Pinned, the same as ProductForm's — see #142: this sheet is far
-              taller than a phone screen, and whether a change saved has to be
-              visible from wherever it was made. */}
-          <div className="form__footer">
-            {saveError ? (
-              <p className="form__error" role="alert">
-                No se guardó: {saveError}
-                {closeBlocked && ' Cierra otra vez para salir sin guardar.'}
-              </p>
-            ) : (
-              <p className="settings__save-status" role="status">
-                {saving ? 'Guardando…' : saved ? 'Guardado' : ''}
-              </p>
-            )}
-            <div className="form__actions">
-              <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
-                {testing ? 'Enviando…' : 'Enviar prueba'}
-              </button>
-              {/* Not "Cerrar": the modal's own × already carries that name. */}
-              <button type="button" className="button--primary" onClick={handleClose}>
-                Listo
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -331,7 +300,35 @@ export function SettingsDialog({
         </p>
       )}
 
-      {current === null && versionLine}
+      {/* Always here, loaded or not, so it's never torn down and recreated. */}
+      <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
+
+      {/* Pinned, the same as ProductForm's — see #142: this sheet is far
+          taller than a phone screen, and whether a change saved has to be
+          visible from wherever it was made. */}
+      {current !== null && (
+        <div className="form__footer">
+          {saveError ? (
+            <p className="form__error" role="alert">
+              No se guardó: {saveError}
+              {closeBlocked && ' Cierra otra vez para salir sin guardar.'}
+            </p>
+          ) : (
+            <p className="settings__save-status" role="status">
+              {saving ? 'Guardando…' : saved ? 'Guardado' : ''}
+            </p>
+          )}
+          <div className="form__actions">
+            <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
+              {testing ? 'Enviando…' : 'Enviar prueba'}
+            </button>
+            {/* Not "Cerrar": the modal's own × already carries that name. */}
+            <button type="button" className="button--primary" onClick={handleClose}>
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
     </Modal>
   )
 }

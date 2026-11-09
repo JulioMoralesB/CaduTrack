@@ -919,7 +919,8 @@ describe('managing categories from Ajustes — see #144', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar' }))
 
     await waitFor(() => expect(categories.deleteCategory).toHaveBeenCalledWith(3))
-    await waitFor(() => expect(headingNames()).toHaveLength(2))
+    // Filtered: Ajustes' own heading is still on screen and has no product name.
+    await waitFor(() => expect(headingNames().filter(Boolean)).toHaveLength(2))
     expect(mockedNameSuggestions.mock.calls.length).toBeGreaterThan(1)
   })
 })
