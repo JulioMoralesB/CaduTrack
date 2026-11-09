@@ -503,7 +503,6 @@ describe('scanning a receipt', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
     fireEvent.change(screen.getByLabelText('Vincular Espinacas a un producto existente'), { target: { value: '5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
 
     expect(await screen.findByText('Ya no quedan productos pendientes en este recibo.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Recibo del 24 sep' })).toBeInTheDocument()

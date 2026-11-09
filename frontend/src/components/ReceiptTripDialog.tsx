@@ -80,7 +80,9 @@ export function ReceiptTripDialog({
   // one only ever offers the one product findDuplicateToday found, this is
   // for everything else (a different day, a name that doesn't match).
   const [manualLinkFor, setManualLinkFor] = useState<number | null>(null)
-  const [manualLinkProductId, setManualLinkProductId] = useState('')
+  // Per line, shown on that line — see #155: one shared error at the very
+  // bottom of a long checklist was off-screen exactly when it mattered.
+  const [rowErrors, setRowErrors] = useState<Record<number, string>>({})
   // Two-step, so a whole receipt is never dropped by one stray tap — see
   // #153.
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
@@ -149,36 +151,37 @@ export function ReceiptTripDialog({
    */
   const handleLinkToExisting = (item: ShoppingTripItem, product: Product) => {
     setLinking(item.id)
-    setError(null)
+    setRowErrors((current) => {
+      const next = { ...current }
+      delete next[item.id]
+      return next
+    })
     void (async () => {
       try {
         const resolved = await resolveTripItem(trip.id, item.id, product.id)
         replaceItem(resolved)
         onTripChanged()
       } catch (caught) {
-        setError(toErrorMessage(caught))
+        setRowErrors((current) => ({ ...current, [item.id]: toErrorMessage(caught) }))
       } finally {
         setLinking(null)
       }
     })()
   }
 
-  const openManualLink = (item: ShoppingTripItem) => {
-    setManualLinkFor(item.id)
-    setManualLinkProductId('')
-    setError(null)
-  }
+  const openManualLink = (item: ShoppingTripItem) => setManualLinkFor(item.id)
 
-  const closeManualLink = () => {
-    setManualLinkFor(null)
-    setManualLinkProductId('')
-  }
+  const closeManualLink = () => setManualLinkFor(null)
 
-  const confirmManualLink = (item: ShoppingTripItem) => {
-    const product = activeProducts.find((candidate) => candidate.id === Number(manualLinkProductId))
+  /** Links as soon as a product is chosen — see #155. There used to be a
+   *  separate Confirmar after choosing, and on a phone the OS picker's own
+   *  "Aceptar" reads as that confirmation: a whole receipt's worth of
+   *  choices was made and none of them ever sent. */
+  const handleManualPick = (item: ShoppingTripItem, productId: string) => {
+    const product = activeProducts.find((candidate) => candidate.id === Number(productId))
     if (!product) return
-    handleLinkToExisting(item, product)
     closeManualLink()
+    handleLinkToExisting(item, product)
   }
 
   /** After a product is created for the item at the front of the queue,
@@ -316,8 +319,8 @@ export function ReceiptTripDialog({
                       <select
                         className="trip-checklist__manual-link-select"
                         aria-label={`Vincular ${item.name} a un producto existente`}
-                        value={manualLinkProductId}
-                        onChange={(event) => setManualLinkProductId(event.target.value)}
+                        value=""
+                        onChange={(event) => handleManualPick(item, event.target.value)}
                       >
                         <option value="">Elige un producto…</option>
                         {activeProducts.map((product) => (
@@ -326,14 +329,6 @@ export function ReceiptTripDialog({
                           </option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        className="trip-checklist__link-button"
-                        onClick={() => confirmManualLink(item)}
-                        disabled={!manualLinkProductId || linking === item.id || submitting}
-                      >
-                        {linking === item.id ? 'Vinculando…' : 'Confirmar'}
-                      </button>
                       {/* Not "Cancelar" — the dialog's own Cancelar button
                           below already carries that name, and two controls
                           sharing one accessible name is exactly what a
@@ -352,58 +347,69 @@ export function ReceiptTripDialog({
                       Vincular a producto existente
                     </button>
                   ))}
+                {linking === item.id && !duplicate && <p className="trip-checklist__status">Vinculando…</p>}
+                {rowErrors[item.id] && (
+                  <p className="form__error" role="alert">
+                    {rowErrors[item.id]}
+                  </p>
+                )}
               </li>
             )
           })}
         </ul>
       )}
 
-      {error && (
-        <p className="form__error" role="alert">
-          {error}
-        </p>
-      )}
-
-      {confirmingDiscard ? (
-        <div className="form__duplicate-warning" role="alert">
-          <p>
-            ¿Descartar {pending.length === 1 ? 'el producto que falta' : `los ${pending.length} productos que faltan`}? No
-            se agrega nada a tu lista.
+      {/* Pinned to the bottom of the sheet, the same as ProductForm's — see
+          #155: with a long checklist, the actions and any error were below
+          the fold. */}
+      <div className="form__footer">
+        {error && (
+          <p className="form__error" role="alert">
+            {error}
           </p>
-          <div className="form__actions">
-            <button type="button" onClick={() => setConfirmingDiscard(false)} disabled={submitting}>
-              Volver
-            </button>
-            <button type="button" className="button--danger" onClick={handleDiscard} disabled={submitting}>
-              {submitting ? 'Descartando…' : 'Sí, descartar'}
-            </button>
+        )}
+
+        {confirmingDiscard ? (
+          <div className="form__duplicate-warning" role="alert">
+            <p>
+              ¿Descartar {pending.length === 1 ? 'el producto que falta' : `los ${pending.length} productos que faltan`}? No
+              se agrega nada a tu lista.
+            </p>
+            <div className="form__actions">
+              <button type="button" onClick={() => setConfirmingDiscard(false)} disabled={submitting}>
+                Volver
+              </button>
+              <button type="button" className="button--danger" onClick={handleDiscard} disabled={submitting}>
+                {submitting ? 'Descartando…' : 'Sí, descartar'}
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="form__actions">
-          {pending.length > 0 && (
-            <button
-              type="button"
-              className="button--danger-text form__actions-start"
-              onClick={() => setConfirmingDiscard(true)}
-              disabled={submitting}
-            >
-              Descartar recibo
+        ) : (
+          <div className="form__actions">
+            {pending.length > 0 && (
+              <button
+                type="button"
+                className="button--danger-text form__actions-start"
+                onClick={() => setConfirmingDiscard(true)}
+                disabled={submitting}
+              >
+                Descartar recibo
+              </button>
+            )}
+            {/* "Cancelar", not "Cerrar": the modal's own × close button already
+                carries that label — see the done screen's own note. Once nothing
+                is left there's nothing to cancel, so it becomes "Entendido". */}
+            <button type="button" onClick={onClose} disabled={submitting}>
+              {pending.length > 0 ? 'Cancelar' : 'Entendido'}
             </button>
-          )}
-          {/* "Cancelar", not "Cerrar": the modal's own × close button already
-              carries that label — see the done screen's own note. Once nothing
-              is left there's nothing to cancel, so it becomes "Entendido". */}
-          <button type="button" onClick={onClose} disabled={submitting}>
-            {pending.length > 0 ? 'Cancelar' : 'Entendido'}
-          </button>
-          {pending.length > 0 && (
-            <button type="button" className="button--primary" onClick={handleContinue} disabled={submitting}>
-              {submitting ? 'Procesando…' : 'Continuar'}
-            </button>
-          )}
-        </div>
-      )}
+            {pending.length > 0 && (
+              <button type="button" className="button--primary" onClick={handleContinue} disabled={submitting}>
+                {submitting ? 'Procesando…' : 'Continuar'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </Modal>
   )
 }

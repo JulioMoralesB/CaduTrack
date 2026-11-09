@@ -1157,3 +1157,8 @@
 .form__actions-start {
   margin-right: auto;
 }
+
+.trip-checklist__status {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
