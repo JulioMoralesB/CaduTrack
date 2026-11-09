@@ -583,7 +583,7 @@
   white-space: nowrap;
 }
 
-.form__date {
+.form__group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -1260,4 +1260,28 @@
   min-width: 0;
   min-height: 2.75rem;
   font-size: 1rem;
+}
+
+/* One row of chips inside a form, scrolled sideways rather than wrapped so it
+   stays one line tall — see #160. Bleeds to the sheet's edge while scrolling. */
+.form__chip-row {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 -1.25rem;
+  padding: 0 1.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.form__chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* A long product name is cut, not allowed to fill the whole row. */
+.form__chip-row > .chip {
+  display: block;
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 2.5rem;
 }

@@ -575,21 +575,72 @@ describe('ProductForm duplicate check', () => {
 })
 
 describe('ProductForm name suggestions', () => {
-  it('lists previously used names in the datalist', () => {
+  function renderWithSuggestions() {
     render(
       <ProductForm
         categories={[LACTEOS]}
         products={[]}
-        nameSuggestions={[nameSuggestion(), nameSuggestion({ name: 'Yogurt griego' })]}
+        nameSuggestions={[nameSuggestion(), nameSuggestion({ name: 'Yogurt griego', category_id: null })]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+  }
+
+  it('uses no <datalist>, which phones draw over the keyboard — see #160', () => {
+    renderWithSuggestions()
+
+    expect(document.querySelector('datalist')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Nombre')).not.toHaveAttribute('list')
+    expect(screen.getByLabelText('Unidad')).not.toHaveAttribute('list')
+  })
+
+  it('offers matching names as buttons once two letters are typed', () => {
+    renderWithSuggestions()
+    expect(screen.queryByRole('group', { name: 'Nombres usados antes' })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'l' } })
+    expect(screen.queryByRole('button', { name: 'Leche entera' })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'LE' } })
+    expect(screen.getByRole('button', { name: 'Leche entera' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yogurt griego' })).not.toBeInTheDocument()
+  })
+
+  it('fills the name, category and location from a tapped suggestion, then gets out of the way', () => {
+    renderWithSuggestions()
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'lec' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Leche entera' }))
+
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Leche entera')
+    expect(screen.getByLabelText('Categoría')).toHaveValue('3')
+    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+    expect(screen.queryByRole('group', { name: 'Nombres usados antes' })).not.toBeInTheDocument()
+  })
+
+  it('does not offer suggestions for a name it did not see typed', () => {
+    render(
+      <ProductForm
+        categories={[LACTEOS]}
+        products={[]}
+        nameSuggestions={[nameSuggestion()]}
+        prefill={{ name: 'Leche' }}
         onSaved={vi.fn()}
         onCancel={vi.fn()}
       />,
     )
 
-    const options = Array.from(document.querySelectorAll('#name-suggestions option')).map(
-      (option) => (option as HTMLOptionElement).value,
-    )
-    expect(options).toEqual(['Leche entera', 'Yogurt griego'])
+    expect(screen.queryByRole('group', { name: 'Nombres usados antes' })).not.toBeInTheDocument()
+  })
+
+  it('fills the unit from a chip, without typing', () => {
+    renderWithSuggestions()
+
+    fireEvent.click(screen.getByRole('button', { name: 'litros' }))
+
+    expect(screen.getByLabelText('Unidad')).toHaveValue('litros')
+    expect(screen.getByRole('button', { name: 'litros' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('fills category and location once the typed name exactly matches, on blur', () => {
@@ -641,7 +692,8 @@ describe('ProductForm name suggestions', () => {
       />,
     )
 
-    expect(document.getElementById('name-suggestions')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Leche' } })
+    expect(screen.queryByRole('group', { name: 'Nombres usados antes' })).not.toBeInTheDocument()
     fireEvent.blur(screen.getByLabelText('Nombre'))
     expect(screen.getByLabelText('Categoría')).toHaveValue('')
     expect(screen.getByLabelText('Dónde está')).toHaveValue('fridge')
