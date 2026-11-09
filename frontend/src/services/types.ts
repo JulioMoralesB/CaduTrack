@@ -48,6 +48,9 @@ export interface ProductNameSuggestion {
   name: string
   category_id: number | null
   location: Location
+  /** How long that same row lasted, for offering it again — see #164. Null
+   *  when there's nothing meaningful to offer. */
+  shelf_days: number | null
 }
 
 export interface ProductFilters {

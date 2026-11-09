@@ -6,6 +6,8 @@ from decimal import Decimal
 
 import pytest
 
+from app.expiry import today as local_today
+
 pytestmark = pytest.mark.integration
 
 
@@ -719,6 +721,28 @@ def test_name_suggestions_includes_consumed_products_history(api_client):
     names = {s["name"] for s in api_client.get("/products/name-suggestions").json()}
 
     assert "Nopal limpio" in names
+
+
+def test_name_suggestions_carries_the_most_recent_rows_shelf_life(api_client):
+    """See #164."""
+    now = local_today()
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(now + timedelta(days=30))))
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(now + timedelta(days=12))))
+
+    suggestions = api_client.get("/products/name-suggestions").json()
+
+    assert [s["shelf_days"] for s in suggestions if s["name"] == "Leche"] == [12]
+
+
+@pytest.mark.parametrize("days", [0, -3])
+def test_name_suggestions_has_no_shelf_life_for_something_already_expired(api_client, days):
+    """See #164: added on or after its own expiry date, so there's no real
+    shelf life to offer next time."""
+    api_client.post("/products", json=_product(name="Leche", expires_at=str(local_today() + timedelta(days=days))))
+
+    suggestions = api_client.get("/products/name-suggestions").json()
+
+    assert [s["shelf_days"] for s in suggestions if s["name"] == "Leche"] == [None]
 
 
 def test_name_suggestions_is_empty_when_there_are_no_products(api_client):

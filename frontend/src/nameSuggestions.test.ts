@@ -4,7 +4,7 @@ import { findNameSuggestion, matchNameSuggestions } from '@/nameSuggestions'
 import type { ProductNameSuggestion } from '@/services/types'
 
 function suggestion(overrides: Partial<ProductNameSuggestion> = {}): ProductNameSuggestion {
-  return { name: 'Leche entera', category_id: 3, location: 'fridge', ...overrides }
+  return { name: 'Leche entera', category_id: 3, location: 'fridge', shelf_days: null, ...overrides }
 }
 
 describe('findNameSuggestion', () => {

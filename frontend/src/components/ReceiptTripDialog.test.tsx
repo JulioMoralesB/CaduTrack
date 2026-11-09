@@ -352,7 +352,7 @@ describe('ReceiptTripDialog continue', () => {
     renderDialog(
       { items: [tripItem({ id: 1, name: 'Nopal limpio', is_food: true })] },
       [],
-      [{ name: 'Nopal limpio', category_id: null, location: 'pantry' }],
+      [{ name: 'Nopal limpio', category_id: null, location: 'pantry', shelf_days: null }],
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import icon_cache, icon_settings_store
 from app.db.session import get_db
+from app.expiry import shelf_life_days
 from app.icons import DEFAULT_ICON, normalize, resolve_icon
 from app.models import Category, IconSource, Location, Product
 from app.ollama_client import resolve_icon_via_model
@@ -122,13 +123,24 @@ def list_name_suggestions(db: Session = Depends(get_db)) -> list[ProductNameSugg
     """
     normalized_name = func.lower(func.trim(Product.name))
     statement = (
-        select(Product.name, Product.category_id, Product.location)
+        select(
+            Product.name,
+            Product.category_id,
+            Product.location,
+            Product.expires_at,
+            Product.created_at,
+        )
         .distinct(normalized_name)
         .order_by(normalized_name, Product.created_at.desc())
     )
     return [
-        ProductNameSuggestion(name=name, category_id=category_id, location=location)
-        for name, category_id, location in db.execute(statement).all()
+        ProductNameSuggestion(
+            name=name,
+            category_id=category_id,
+            location=location,
+            shelf_days=shelf_life_days(expires_at, created_at),
+        )
+        for name, category_id, location, expires_at, created_at in db.execute(statement).all()
     ]
 
 

@@ -1,11 +1,18 @@
 """Expiry status calculation tests."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
 from app.config import settings
-from app.expiry import EXPIRING_SOON_DAYS, ExpiryStatus, days_until_expiry, expiry_status, today
+from app.expiry import (
+    EXPIRING_SOON_DAYS,
+    ExpiryStatus,
+    days_until_expiry,
+    expiry_status,
+    shelf_life_days,
+    today,
+)
 
 
 @pytest.mark.parametrize(
@@ -57,3 +64,20 @@ def test_today_honours_the_configured_timezone(monkeypatch):
 
     # date.today() would make these equal, which is the regression this catches.
     assert ahead > behind
+
+
+def test_shelf_life_counts_from_the_local_purchase_date(monkeypatch):
+    """10 pm on March 9 in Mexico is already March 10 in UTC — counting from
+    the UTC date would come up one day short."""
+    monkeypatch.setattr(settings, "timezone", "America/Mexico_City")
+    bought = datetime(2026, 3, 10, 4, 0, tzinfo=UTC)
+
+    assert shelf_life_days(date(2026, 3, 21), bought) == 12
+
+
+@pytest.mark.parametrize("expires_at", [date(2026, 3, 9), date(2026, 3, 8)])
+def test_no_shelf_life_when_it_was_not_good_on_the_day_it_was_added(monkeypatch, expires_at):
+    monkeypatch.setattr(settings, "timezone", "UTC")
+    bought = datetime(2026, 3, 9, 12, 0, tzinfo=UTC)
+
+    assert shelf_life_days(expires_at, bought) is None

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductForm } from '@/components/ProductForm'
-import { QUICK_DATES, quickDateValue } from '@/quickDates'
+import { QUICK_DATES, lastShelfLife, quickDateValue } from '@/quickDates'
 import type { BarcodeLookupResult, Category, LabelExtraction, Product, ProductNameSuggestion } from '@/services/types'
 
 vi.mock('@/services/productsService', () => ({
@@ -40,7 +40,7 @@ function barcodeLookupResult(overrides: Partial<BarcodeLookupResult> = {}): Barc
 }
 
 function nameSuggestion(overrides: Partial<ProductNameSuggestion> = {}): ProductNameSuggestion {
-  return { name: 'Leche entera', category_id: 3, location: 'pantry', ...overrides }
+  return { name: 'Leche entera', category_id: 3, location: 'pantry', shelf_days: null, ...overrides }
 }
 
 const LACTEOS: Category = { id: 3, name: 'Lácteos', created_at: '2026-08-01T00:00:00Z' }
@@ -571,6 +571,59 @@ describe('ProductForm duplicate check', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /guardar/i }))
     expect(mockedCreate).toHaveBeenCalledOnce()
+  })
+})
+
+describe('ProductForm last shelf life — see #164', () => {
+  const CHIP = /como la última vez/i
+
+  function renderForm(props: Partial<Parameters<typeof ProductForm>[0]> = {}) {
+    render(
+      <ProductForm
+        categories={[]}
+        products={[]}
+        nameSuggestions={[nameSuggestion({ shelf_days: 12 })]}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+        {...props}
+      />,
+    )
+  }
+
+  it('offers it once the name matches, and only fills the date when tapped', () => {
+    renderForm()
+    expect(screen.queryByRole('button', { name: CHIP })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'leche entera' } })
+    expect(screen.getByLabelText('Caduca el')).toHaveValue('')
+
+    const chip = screen.getByRole('button', { name: CHIP })
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(chip)
+
+    expect(screen.getByLabelText('Caduca el')).toHaveValue(lastShelfLife(12).value)
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('leaves a date read from a label alone until the chip is tapped', () => {
+    renderForm({ prefill: { name: 'Leche entera', expires_at: '2030-01-15' } })
+
+    expect(screen.getByRole('button', { name: CHIP })).toBeInTheDocument()
+    expect(screen.getByLabelText('Caduca el')).toHaveValue('2030-01-15')
+  })
+
+  it('offers nothing without a usable shelf life', () => {
+    renderForm({ nameSuggestions: [nameSuggestion({ shelf_days: null })] })
+
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Leche entera' } })
+
+    expect(screen.queryByRole('button', { name: CHIP })).not.toBeInTheDocument()
+  })
+
+  it('offers nothing while editing', () => {
+    renderForm({ product: fakeProduct({ name: 'Leche entera' }) })
+
+    expect(screen.queryByRole('button', { name: CHIP })).not.toBeInTheDocument()
   })
 })
 
