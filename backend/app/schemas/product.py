@@ -41,6 +41,9 @@ class ProductNameSuggestion(BaseModel):
     name: str
     category_id: int | None = None
     location: Location
+    # How long that same row lasted, in days — see #164. None when there's
+    # nothing meaningful to offer; see shelf_life_days.
+    shelf_days: int | None = None
 
 
 class ProductUpdate(ProductBase):

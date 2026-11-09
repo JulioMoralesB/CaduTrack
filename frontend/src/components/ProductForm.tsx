@@ -6,7 +6,7 @@ import { findDuplicateToday } from '@/duplicateCheck'
 import { LOCATION_LABELS, quantityLabel } from '@/labels'
 import { findNameSuggestion, matchNameSuggestions } from '@/nameSuggestions'
 import { canStepDown, stepQuantity } from '@/quantity'
-import { QUICK_DATES, quickDateValue } from '@/quickDates'
+import { QUICK_DATES, lastShelfLife, quickDateValue } from '@/quickDates'
 import { toErrorMessage } from '@/services/api'
 import { lookupBarcode, rememberBarcode, scanBarcodePhoto } from '@/services/barcodesService'
 import { adjustProductQuantity, createProduct, replaceProduct } from '@/services/productsService'
@@ -165,6 +165,11 @@ export function ProductForm({
   }
 
   const nameMatches = !isEdit && typedName === form.name ? matchNameSuggestions(nameSuggestions, form.name) : []
+
+  // Offered, never applied on its own — see #164: a wrong date is worse than
+  // no date, and one already read from a label must not be overwritten.
+  const shelfDays = isEdit ? null : (findNameSuggestion(nameSuggestions, form.name)?.shelf_days ?? null)
+  const lastTime = shelfDays === null ? null : lastShelfLife(shelfDays)
 
   const pickNameSuggestion = (suggestion: ProductNameSuggestion) => {
     setForm((current) => applyNameSuggestion({ ...current, name: suggestion.name }, suggestion))
@@ -513,6 +518,16 @@ export function ProductForm({
                 </button>
               )
             })}
+            {lastTime && (
+              <button
+                type="button"
+                className="chip form__quick-date--wide"
+                aria-pressed={form.expires_at === lastTime.value}
+                onClick={() => update('expires_at', lastTime.value)}
+              >
+                {lastTime.label}
+              </button>
+            )}
           </div>
         </div>
 

@@ -37,3 +37,21 @@ export function quickDateValue(quick: QuickDate, today: Date = new Date()): stri
   if (quick.days) date.setDate(date.getDate() + quick.days)
   return toDateInputValue(date)
 }
+
+export interface LastShelfLife {
+  label: string
+  value: string
+}
+
+/** The same shelf life as the last purchase, counted from today — see #164.
+ *  Shows the date it lands on, with the year only when it isn't this one. */
+export function lastShelfLife(shelfDays: number, today: Date = new Date()): LastShelfLife {
+  const value = quickDateValue({ label: '', days: shelfDays }, today)
+  const expires = new Date(`${value}T00:00:00`)
+  const date = expires.toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: expires.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  })
+  return { label: `Como la última vez: ${shelfDays} ${shelfDays === 1 ? 'día' : 'días'} · ${date}`, value }
+}

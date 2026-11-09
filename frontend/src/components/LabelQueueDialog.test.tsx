@@ -174,7 +174,7 @@ describe('LabelQueueDialog adding', () => {
   it('reuses a known name’s category and location as soon as the form opens — see #133', () => {
     renderDialog([scan({ name: 'YOGUR NATURAL' })], {
       categories: [{ id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' }],
-      nameSuggestions: [{ name: 'Yogur natural', category_id: 3, location: 'pantry' }],
+      nameSuggestions: [{ name: 'Yogur natural', category_id: 3, location: 'pantry', shelf_days: null }],
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Agregar YOGUR NATURAL' }))

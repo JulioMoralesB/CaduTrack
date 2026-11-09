@@ -38,6 +38,18 @@ def days_until_expiry(expires_at: date, reference: date | None = None) -> int:
     return (expires_at - (reference or today())).days
 
 
+def shelf_life_days(expires_at: date, created_at: datetime) -> int | None:
+    """How many days a product had left on the day it was added — see #164.
+
+    created_at is a timestamp, so it's converted to the configured timezone
+    first, or anything added at night in Mexico comes up a day short. None
+    when it was added on or after its own expiry date: that isn't a shelf
+    life worth offering for the next purchase.
+    """
+    days = (expires_at - created_at.astimezone(ZoneInfo(settings.timezone)).date()).days
+    return days if days > 0 else None
+
+
 def expiry_status(days: int) -> ExpiryStatus:
     """Bucket a day count.
 
