@@ -77,7 +77,7 @@ def get_current_trip(db: Session = Depends(get_db)) -> ShoppingTrip | None:
 
 
 @router.post("/receipt", response_model=ShoppingTripRead, status_code=status.HTTP_201_CREATED)
-async def create_trip_from_receipt(
+def create_trip_from_receipt(
     image: UploadFile = File(...), db: Session = Depends(get_db)
 ) -> ShoppingTrip:
     """Read a receipt photo into a new trip's checklist.
@@ -90,7 +90,10 @@ async def create_trip_from_receipt(
     products table through its own dedicated resolve endpoint, same as
     every other create in this API going through its own confirmation step.
     """
-    contents = await image.read()
+    # A plain def, not async: FastAPI runs it on a worker thread. This waits
+    # on the vision model, and on the event loop that would freeze every other
+    # request for as long as it takes — see #162.
+    contents = image.file.read()
     if not contents:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="La imagen está vacía")
     if len(contents) > _MAX_IMAGE_BYTES:
@@ -121,6 +124,9 @@ async def create_trip_from_receipt(
             unseen_raw_names.add(item.raw_name)
 
     if unseen_raw_names:
+        # Ends the read transaction the lookups above opened, so a model call
+        # of up to 30 seconds doesn't hold a pooled connection doing nothing.
+        db.commit()
         resolved_names.update(expand_names(list(unseen_raw_names)))
 
     trip = ShoppingTrip(stated_item_count=extraction.stated_item_count)

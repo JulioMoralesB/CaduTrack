@@ -29,7 +29,7 @@ _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 @router.post("/scan-photo", response_model=BarcodeScanPhotoResult)
-async def scan_barcode_photo(image: UploadFile = File(...)) -> BarcodeScanPhotoResult:
+def scan_barcode_photo(image: UploadFile = File(...)) -> BarcodeScanPhotoResult:
     """Decode a barcode from a photo taken with the phone's own camera —
     see #132, replacing the old live in-browser video scan.
 
@@ -38,7 +38,10 @@ async def scan_barcode_photo(image: UploadFile = File(...)) -> BarcodeScanPhotoR
     /barcodes/lookup with the raw value this returns, exactly as it did
     with a live scanner's own detected value.
     """
-    contents = await image.read()
+    # A plain def, not async: FastAPI runs it on a worker thread. This waits
+    # on CPU-bound image decoding, and on the event loop that would freeze every other
+    # request for as long as it takes — see #162.
+    contents = image.file.read()
     if not contents:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="La imagen está vacía")
     if len(contents) > _MAX_IMAGE_BYTES:
