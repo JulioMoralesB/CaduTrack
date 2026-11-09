@@ -77,7 +77,7 @@ export function ProductList() {
   const [labelScans, setLabelScans] = useState<LabelScan[]>([])
   const [uploadingLabels, setUploadingLabels] = useState<{ done: number; total: number } | null>(null)
   const [labelError, setLabelError] = useState<string | null>(null)
-  const [lastConsumed, setLastConsumed] = useState<Product | null>(null)
+  const [lastConsumed, setLastConsumed] = useState<{ product: Product; spoiled: boolean } | null>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
   const labelsReading = labelScans.some((scan) => scan.status === 'pending')
   const pendingTripCount = currentTrip?.items.filter((item) => item.resolved_at === null).length ?? 0
@@ -171,10 +171,10 @@ export function ProductList() {
 
   /** Takes the row off the list and offers a way back — see #143: undoing
    *  a mistaken tap used to mean knowing to look in Historial. */
-  const handleConsumed = (id: number) => {
+  const handleConsumed = (id: number, spoiled: boolean) => {
     const consumed = products.find((product) => product.id === id)
     removeProduct(id)
-    if (consumed) setLastConsumed(consumed)
+    if (consumed) setLastConsumed({ product: consumed, spoiled })
   }
 
   const undoConsume = async (product: Product) => {
@@ -489,11 +489,11 @@ export function ProductList() {
 
       {lastConsumed && (
         <UndoToast
-          key={lastConsumed.id}
+          key={lastConsumed.product.id}
           // Name last, not "X marcado como…": no agreement to get wrong for
           // a feminine or plural name.
-          message={`Consumido: ${lastConsumed.name}`}
-          onUndo={() => undoConsume(lastConsumed)}
+          message={`${lastConsumed.spoiled ? 'Se echó a perder' : 'Consumido'}: ${lastConsumed.product.name}`}
+          onUndo={() => undoConsume(lastConsumed.product)}
           onDismiss={dismissUndo}
         />
       )}

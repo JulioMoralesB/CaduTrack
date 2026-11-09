@@ -94,7 +94,14 @@ export async function consumeProduct(id: number): Promise<Product> {
   return data
 }
 
-/** Undo a consumed mark, returning a product to the active list. Not
+/** Mark a product as thrown out rather than eaten — see #145. Not retried,
+ *  for the same reason as consumeProduct. */
+export async function spoilProduct(id: number): Promise<Product> {
+  const { data } = await api.post<Product>(`/products/${id}/spoil`)
+  return data
+}
+
+/** Undo a consumed or spoiled mark, returning a product to the active list. Not
  *  retried, for the same reason as consumeProduct. */
 export async function restoreProduct(id: number): Promise<Product> {
   const { data } = await api.post<Product>(`/products/${id}/restore`)

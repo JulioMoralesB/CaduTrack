@@ -8,12 +8,14 @@ vi.mock('@/services/productsService', () => ({
   adjustProductQuantity: vi.fn(),
   setProductIcon: vi.fn(),
   consumeProduct: vi.fn(),
+  spoilProduct: vi.fn(),
 }))
 
 const products = await import('@/services/productsService')
 const mockedAdjust = vi.mocked(products.adjustProductQuantity)
 const mockedSetIcon = vi.mocked(products.setProductIcon)
 const mockedConsume = vi.mocked(products.consumeProduct)
+const mockedSpoil = vi.mocked(products.spoilProduct)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -35,6 +37,7 @@ function product(overrides: Partial<Product> = {}): Product {
     created_at: '2026-08-29T00:00:00Z',
     updated_at: '2026-08-29T00:00:00Z',
     consumed_at: null,
+    spoiled: false,
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
@@ -302,7 +305,7 @@ describe('ProductCard consume action', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
 
-    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1))
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1, false))
     expect(mockedConsume).toHaveBeenCalledWith(1)
   })
 
@@ -395,5 +398,60 @@ describe('ProductCard compact layout — see #140', () => {
 
     expect(onEdit).toHaveBeenCalledWith(target)
     expect(onDelete).toHaveBeenCalledWith(target)
+  })
+})
+
+describe('ProductCard spoiled action — see #145', () => {
+  const spoilButton = { name: 'Se echó a perder: Plátano' }
+
+  it('sits with the rarer actions, behind the expansion', () => {
+    renderCard()
+    expect(screen.queryByRole('button', spoilButton)).not.toBeInTheDocument()
+
+    expand()
+
+    expect(screen.getByRole('button', spoilButton)).toBeInTheDocument()
+  })
+
+  it('records it as spoiled, not as consumed', async () => {
+    mockedSpoil.mockResolvedValue(product({ consumed_at: '2026-11-09T12:00:00Z', spoiled: true }))
+    const { onConsumed } = renderCard()
+    expand()
+
+    fireEvent.click(screen.getByRole('button', spoilButton))
+
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1, true))
+    expect(mockedSpoil).toHaveBeenCalledWith(1)
+    expect(mockedConsume).not.toHaveBeenCalled()
+  })
+
+  it('disables both ways out while one is in flight', async () => {
+    let resolveRequest: (result: Product) => void = () => {}
+    mockedSpoil.mockReturnValue(
+      new Promise<Product>((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+    renderCard()
+    expand()
+
+    fireEvent.click(screen.getByRole('button', spoilButton))
+
+    await waitFor(() => expect(screen.getByRole('button', spoilButton)).toBeDisabled())
+    expect(screen.getByRole('button', { name: /marcar plátano como consumido/i })).toBeDisabled()
+
+    resolveRequest(product({ spoiled: true }))
+    await waitFor(() => expect(screen.getByRole('button', spoilButton)).toBeEnabled())
+  })
+
+  it('shows the failure and keeps the card', async () => {
+    mockedSpoil.mockRejectedValue(new Error('boom'))
+    const { onConsumed } = renderCard()
+    expand()
+
+    fireEvent.click(screen.getByRole('button', spoilButton))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(onConsumed).not.toHaveBeenCalled()
   })
 })

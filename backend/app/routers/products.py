@@ -261,6 +261,21 @@ def override_icon(product_id: int, payload: ProductIconUpdate, db: Session = Dep
     return product
 
 
+def _remove_from_list(db: Session, product_id: int, *, spoiled: bool) -> Product:
+    product = _get_or_404(db, product_id)
+    if product.consumed_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Product is already marked as consumed"
+        )
+
+    product.consumed_at = func.now()
+    product.spoiled = spoiled
+    db.commit()
+    db.refresh(product)
+    logger.info("Marked product %s (%s) as %s", product.id, product.name, "spoiled" if spoiled else "consumed")
+    return product
+
+
 @router.post("/{product_id}/consume", response_model=ProductRead)
 def consume_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     """Mark a product as consumed, moving it from the active list to history.
@@ -271,17 +286,14 @@ def consume_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     the same reason as delete: a repeat that follows a success would 409, and
     the user would be shown an error for an action that already worked.
     """
-    product = _get_or_404(db, product_id)
-    if product.consumed_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Product is already marked as consumed"
-        )
+    return _remove_from_list(db, product_id, spoiled=False)
 
-    product.consumed_at = func.now()
-    db.commit()
-    db.refresh(product)
-    logger.info("Marked product %s (%s) as consumed", product.id, product.name)
-    return product
+
+@router.post("/{product_id}/spoil", response_model=ProductRead)
+def spoil_product(product_id: int, db: Session = Depends(get_db)) -> Product:
+    """Mark a product as thrown out, moving it to history the same way as
+    /consume but recorded apart from what was actually eaten — see #145."""
+    return _remove_from_list(db, product_id, spoiled=True)
 
 
 @router.post("/{product_id}/restore", response_model=ProductRead)
@@ -294,6 +306,7 @@ def restore_product(product_id: int, db: Session = Depends(get_db)) -> Product:
         )
 
     product.consumed_at = None
+    product.spoiled = False
     db.commit()
     db.refresh(product)
     logger.info("Restored product %s (%s) from history", product.id, product.name)

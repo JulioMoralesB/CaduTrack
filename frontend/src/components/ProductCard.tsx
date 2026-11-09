@@ -4,7 +4,7 @@ import { IconPicker } from '@/components/IconPicker'
 import { LOCATION_LABELS, expiryPhrase, quantityLabel } from '@/labels'
 import { canStepDown } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
-import { adjustProductQuantity, consumeProduct, setProductIcon } from '@/services/productsService'
+import { adjustProductQuantity, consumeProduct, setProductIcon, spoilProduct } from '@/services/productsService'
 import type { Product } from '@/services/types'
 
 interface ProductCardProps {
@@ -14,9 +14,9 @@ interface ProductCardProps {
   /** Called with the server's own response after a successful quantity tap or
    *  icon change, so the list can update that one row without a full reload. */
   onProductChanged: (updated: Product) => void
-  /** Called with the id after a successful consume — the row leaves the
-   *  active list entirely rather than being updated in place. */
-  onConsumed: (id: number) => void
+  /** Called with the id after the product leaves the list, eaten or thrown
+   *  out — the row goes away entirely rather than being updated in place. */
+  onConsumed: (id: number, spoiled: boolean) => void
 }
 
 /**
@@ -38,7 +38,8 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
   const [savingIcon, setSavingIcon] = useState(false)
   const [iconError, setIconError] = useState<string | null>(null)
 
-  const [consuming, setConsuming] = useState(false)
+  // Which of the two ways out is in flight, if any.
+  const [leaving, setLeaving] = useState<'consumed' | 'spoiled' | null>(null)
   const [consumeError, setConsumeError] = useState<string | null>(null)
 
   const adjustQuantity = (delta: 1 | -1) => {
@@ -77,17 +78,17 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
     })()
   }
 
-  const handleConsume = () => {
-    setConsuming(true)
+  const leaveList = (spoiled: boolean) => {
+    setLeaving(spoiled ? 'spoiled' : 'consumed')
     setConsumeError(null)
     void (async () => {
       try {
-        await consumeProduct(product.id)
-        onConsumed(product.id)
+        await (spoiled ? spoilProduct : consumeProduct)(product.id)
+        onConsumed(product.id, spoiled)
       } catch (caught) {
         setConsumeError(toErrorMessage(caught))
       } finally {
-        setConsuming(false)
+        setLeaving(null)
       }
     })()
   }
@@ -132,11 +133,11 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
         <button
           type="button"
           className="product-card__consume"
-          onClick={handleConsume}
-          disabled={consuming}
+          onClick={() => leaveList(false)}
+          disabled={leaving !== null}
           aria-label={`Marcar ${product.name} como consumido`}
         >
-          {consuming ? 'Marcando…' : 'Consumido'}
+          {leaving === 'consumed' ? 'Marcando…' : 'Consumido'}
         </button>
       </div>
 
@@ -210,6 +211,16 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
                 +
               </button>
             </span>
+            {/* Named "Se echó a perder: X", not "Marcar X como…": no agreement
+                to get wrong for a feminine or plural name. */}
+            <button
+              type="button"
+              onClick={() => leaveList(true)}
+              disabled={leaving !== null}
+              aria-label={`Se echó a perder: ${product.name}`}
+            >
+              {leaving === 'spoiled' ? 'Marcando…' : 'Se echó a perder'}
+            </button>
             <button type="button" onClick={() => onEdit(product)} aria-label={`Editar ${product.name}`}>
               Editar
             </button>

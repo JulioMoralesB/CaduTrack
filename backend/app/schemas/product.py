@@ -108,6 +108,9 @@ class ProductRead(ProductBase):
     # by POST /products/{id}/restore — never accepted on ProductCreate/Update
     # for the same reason icon is kept off them (see ProductIconUpdate above).
     consumed_at: datetime | None = None
+    # Whether it left by being thrown out rather than eaten — see #145. Same
+    # as consumed_at: only ever set through its own endpoints.
+    spoiled: bool = False
 
     @computed_field
     @property

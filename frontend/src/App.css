@@ -863,6 +863,26 @@
   gap: 0.5rem;
 }
 
+.product-history__month-header {
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.product-history__month-header h3 {
+  font-size: 0.9375rem;
+}
+
+.product-history__month-header p {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.product-history__spoiled {
+  color: var(--status-expired);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .product-history__row {
   display: flex;
   align-items: center;

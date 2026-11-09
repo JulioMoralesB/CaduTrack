@@ -13,6 +13,7 @@ vi.mock('@/services/productsService', () => ({
   adjustProductQuantity: vi.fn(),
   setProductIcon: vi.fn(),
   consumeProduct: vi.fn(),
+  spoilProduct: vi.fn(),
   listConsumedProducts: vi.fn(),
   restoreProduct: vi.fn(),
   listNameSuggestions: vi.fn(),
@@ -84,6 +85,7 @@ function product(overrides: Partial<Product> = {}): Product {
     created_at: '2026-08-29T00:00:00Z',
     updated_at: '2026-08-29T00:00:00Z',
     consumed_at: null,
+    spoiled: false,
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
@@ -352,6 +354,23 @@ describe('consuming a product', () => {
     // row leaving is proof enough, a second listProducts call would mean it
     // took the reload path instead of the local removal one.
     expect(mockedList).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so when it was thrown out, and can undo that too — see #145', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+    vi.mocked(products.spoilProduct).mockResolvedValue(product({ consumed_at: '2026-11-09T12:00:00Z', spoiled: true }))
+    mockedRestore.mockResolvedValue(product())
+
+    render(<ProductList />)
+    await expandCard('Leche entera')
+    fireEvent.click(screen.getByRole('button', { name: 'Se echó a perder: Leche entera' }))
+
+    expect(await screen.findByText('Se echó a perder: Leche entera')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Leche entera/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+
+    await waitFor(() => expect(mockedRestore).toHaveBeenCalledWith(1))
   })
 
   it('offers to undo it — see #143', async () => {
