@@ -4,7 +4,7 @@ import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
 import { findDuplicateToday } from '@/duplicateCheck'
 import { LOCATION_LABELS, quantityLabel } from '@/labels'
-import { findNameSuggestion } from '@/nameSuggestions'
+import { findNameSuggestion, matchNameSuggestions } from '@/nameSuggestions'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { QUICK_DATES, quickDateValue } from '@/quickDates'
 import { toErrorMessage } from '@/services/api'
@@ -137,6 +137,11 @@ export function ProductForm({
   // just noise.
   const [duplicateWarning, setDuplicateWarning] = useState<Product | null>(null)
 
+  // What was last typed into the name field. Suggestions only show while
+  // that's still what the field says, so a name filled in by a scan or a
+  // prefill never opens them.
+  const [typedName, setTypedName] = useState<string | null>(null)
+
   const isEdit = product !== undefined
   const scanBusy = scanning || barcodeScanning || barcodeLookupPending
   const labelInputRef = useRef<HTMLInputElement>(null)
@@ -157,6 +162,14 @@ export function ProductForm({
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }))
     if (field === 'name') setDuplicateWarning(null)
+  }
+
+  const nameMatches = !isEdit && typedName === form.name ? matchNameSuggestions(nameSuggestions, form.name) : []
+
+  const pickNameSuggestion = (suggestion: ProductNameSuggestion) => {
+    setForm((current) => applyNameSuggestion({ ...current, name: suggestion.name }, suggestion))
+    setDuplicateWarning(null)
+    setTypedName(null)
   }
 
   /** Reuses a previously used name's own category/location once the name
@@ -436,32 +449,46 @@ export function ProductForm({
           </div>
         )}
 
-        <label className="form__field">
-          <span>Nombre</span>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(event) => update('name', event.target.value)}
-            // Suggestions and the category/location autofill they carry are
-            // a create-time convenience only — see #133. Re-typing an
-            // existing product's own name while editing it must not
-            // silently pull in some other product's category or location.
-            onBlur={isEdit ? undefined : handleNameBlur}
-            list={isEdit ? undefined : 'name-suggestions'}
-            required
-            maxLength={255}
-            autoFocus
-          />
-          {!isEdit && (
-            <datalist id="name-suggestions">
-              {nameSuggestions.map((suggestion) => (
-                <option key={suggestion.name} value={suggestion.name} />
+        <div className="form__group">
+          <label className="form__field">
+            <span>Nombre</span>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(event) => {
+                setTypedName(event.target.value)
+                update('name', event.target.value)
+              }}
+              // The category/location autofill is a create-time convenience
+              // only — see #133. Re-typing an existing product's own name
+              // while editing it must not silently pull in some other
+              // product's category or location.
+              onBlur={isEdit ? undefined : handleNameBlur}
+              required
+              maxLength={255}
+              autoFocus
+            />
+          </label>
+          {/* Chips in the form rather than a <datalist> — see #160: the phone
+              draws a datalist itself, usually right over the keyboard, where
+              typing kept hitting it by accident. */}
+          {nameMatches.length > 0 && (
+            <div className="form__chip-row" role="group" aria-label="Nombres usados antes">
+              {nameMatches.map((suggestion) => (
+                <button
+                  key={suggestion.name}
+                  type="button"
+                  className="chip"
+                  onClick={() => pickNameSuggestion(suggestion)}
+                >
+                  {suggestion.name}
+                </button>
               ))}
-            </datalist>
+            </div>
           )}
-        </label>
+        </div>
 
-        <div className="form__date">
+        <div className="form__group">
           <label className="form__field">
             <span>Caduca el</span>
             <input
@@ -565,16 +592,25 @@ export function ProductForm({
               type="text"
               value={form.unit}
               onChange={(event) => update('unit', event.target.value)}
-              list="unit-suggestions"
               maxLength={50}
               placeholder="piezas"
             />
-            <datalist id="unit-suggestions">
-              {UNIT_SUGGESTIONS.map((unit) => (
-                <option key={unit} value={unit} />
-              ))}
-            </datalist>
           </label>
+        </div>
+
+        {/* One tap, no keyboard — and no <datalist> over it. See #160. */}
+        <div className="form__chip-row" role="group" aria-label="Unidades comunes">
+          {UNIT_SUGGESTIONS.map((unit) => (
+            <button
+              key={unit}
+              type="button"
+              className="chip"
+              aria-pressed={form.unit === unit}
+              onClick={() => update('unit', unit)}
+            >
+              {unit}
+            </button>
+          ))}
         </div>
 
         <label className="form__field">
