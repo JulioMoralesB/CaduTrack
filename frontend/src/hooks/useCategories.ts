@@ -1,31 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { listCategories } from '@/services/categoriesService'
 import type { Category } from '@/services/types'
 
+export interface CategoriesState {
+  categories: Category[]
+  /** Refetches after a change from Ajustes — see #144. */
+  reload: () => Promise<void>
+}
+
 /**
- * Categories for the form's select.
+ * Categories for the form's select and the filters.
  *
  * A failure here is not worth blocking on: the category field is optional, so
- * the form stays usable with an empty list.
+ * the form stays usable with whatever list it last had.
  */
-export function useCategories(): Category[] {
+export function useCategories(): CategoriesState {
   const [categories, setCategories] = useState<Category[]>([])
 
-  useEffect(() => {
-    let active = true
-    void (async () => {
-      try {
-        const data = await listCategories()
-        if (active) setCategories(data)
-      } catch {
-        if (active) setCategories([])
-      }
-    })()
-    return () => {
-      active = false
-    }
-  }, [])
+  const reload = useCallback(
+    () =>
+      listCategories()
+        .then(setCategories)
+        // Keeps the last list; see above.
+        .catch(() => {}),
+    [],
+  )
 
-  return categories
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  return { categories, reload }
 }

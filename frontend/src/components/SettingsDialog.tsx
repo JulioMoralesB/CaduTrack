@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { CategoryManager } from '@/components/CategoryManager'
 import { Modal } from '@/components/Modal'
 import { ThemePicker } from '@/components/ThemePicker'
 import { useAutosave } from '@/hooks/useAutosave'
 import { toErrorMessage } from '@/services/api'
 import { reassignIcons } from '@/services/productsService'
 import { getSettings, saveIconSettings, saveSettings, triggerAlert } from '@/services/settingsService'
-import type { AlertSettingsPayload, IconSettingsPayload, SettingsResponse } from '@/services/types'
+import type { AlertSettingsPayload, Category, IconSettingsPayload, Product, SettingsResponse } from '@/services/types'
 import { APP_VERSION } from '@/version'
 
 interface SettingsDialogProps {
+  categories: Category[]
+  /** The active product list, to say what deleting a category would touch. */
+  products: Product[]
   onClose: () => void
   /** Called once after a successful icon reassignment, so the product list
    *  behind the dialog picks up the new icons instead of showing stale ones
    *  until something else happens to trigger a reload. */
   onIconsReassigned: () => void
+  /** Called after any category change, with the id if one was deleted. */
+  onCategoriesChanged: (deletedId?: number) => Promise<void>
 }
 
 /**
@@ -76,7 +82,13 @@ function validateAlerts(
  *  and close without saving. Two backend resources (see PUT /settings and
  *  PUT /settings/icons), each with its own autosave, so neither ever has to
  *  resend the other's values. */
-export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogProps) {
+export function SettingsDialog({
+  categories,
+  products,
+  onClose,
+  onIconsReassigned,
+  onCategoriesChanged,
+}: SettingsDialogProps) {
   const [current, setCurrent] = useState<SettingsResponse | null>(null)
   const [enabled, setEnabled] = useState(true)
   const [alertTime, setAlertTime] = useState('08:00')
@@ -274,6 +286,8 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
             existían antes de esta función.
           </p>
           {reassignResult && <p className="settings__hint">{reassignResult}</p>}
+
+          <CategoryManager categories={categories} products={products} onChanged={onCategoriesChanged} />
 
           {error && (
             <p className="form__error" role="alert">

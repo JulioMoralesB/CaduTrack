@@ -20,6 +20,16 @@ vi.mock('@/services/productsService', () => ({
 
 vi.mock('@/services/categoriesService', () => ({
   listCategories: vi.fn(),
+  createCategory: vi.fn(),
+  renameCategory: vi.fn(),
+  deleteCategory: vi.fn(),
+}))
+
+vi.mock('@/services/settingsService', () => ({
+  getSettings: vi.fn(),
+  saveSettings: vi.fn(),
+  saveIconSettings: vi.fn(),
+  triggerAlert: vi.fn(),
 }))
 
 vi.mock('@/services/tripsService', () => ({
@@ -40,6 +50,7 @@ vi.mock('@/services/labelScansService', () => ({
 
 const products = await import('@/services/productsService')
 const categories = await import('@/services/categoriesService')
+const settings = await import('@/services/settingsService')
 const trips = await import('@/services/tripsService')
 const labelScans = await import('@/services/labelScansService')
 const mockedCurrentLabelScans = vi.mocked(labelScans.getCurrentLabelScans)
@@ -851,5 +862,64 @@ describe('queuing label photos', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('managing categories from Ajustes — see #144', () => {
+  const lacteos = { id: 3, name: 'Lácteos', created_at: '2026-08-29T00:00:00Z' }
+
+  async function openCategories() {
+    vi.mocked(settings.getSettings).mockResolvedValue({
+      alerts: { enabled: true, alert_time: '08:00', days_ahead: 7, updated_at: '2026-08-30T00:00:00Z' },
+      icons: { ai_enabled: true, updated_at: '2026-08-30T00:00:00Z' },
+      telegram_configured: true,
+      next_run_at: null,
+      timezone: 'America/Mexico_City',
+      ollama_configured: true,
+      backend_version: 'dev',
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Ajustes' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Administrar categorías/ }))
+  }
+
+  it('refreshes the list after a rename, so cards show the new name', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+    vi.mocked(categories.renameCategory).mockResolvedValue({ ...lacteos, name: 'Lácteos y huevos' })
+    render(<ProductList />)
+    await screen.findByText('Leche entera')
+    await openCategories()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Renombrar Lácteos' }))
+    fireEvent.change(screen.getByLabelText('Nuevo nombre de Lácteos'), { target: { value: 'Lácteos y huevos' } })
+    mockedCategories.mockResolvedValue([{ ...lacteos, name: 'Lácteos y huevos' }])
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar nombre de Lácteos' }))
+
+    expect(await screen.findByRole('button', { name: 'Renombrar Lácteos y huevos' })).toBeInTheDocument()
+    expect(mockedList).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears a filter on a category that gets deleted', async () => {
+    mockedList.mockResolvedValue({
+      products: [product({ category_id: 3, category: lacteos }), product({ id: 2, name: 'Arroz' })],
+      cachedAt: null,
+    })
+    vi.mocked(categories.deleteCategory).mockResolvedValue(undefined)
+    render(<ProductList />)
+    await screen.findByText('Arroz')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Más filtros' }))
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Lácteos' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Categoría'), { target: { value: '3' } })
+    expect(headingNames()).toEqual(['Leche entera'])
+
+    await openCategories()
+    fireEvent.click(await screen.findByRole('button', { name: 'Eliminar Lácteos' }))
+    expect(screen.getByText(/1 producto quedará sin categoría/)).toBeInTheDocument()
+    mockedCategories.mockResolvedValue([])
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar' }))
+
+    await waitFor(() => expect(categories.deleteCategory).toHaveBeenCalledWith(3))
+    await waitFor(() => expect(headingNames()).toHaveLength(2))
+    expect(mockedNameSuggestions.mock.calls.length).toBeGreaterThan(1)
   })
 })

@@ -12,6 +12,12 @@ export async function createCategory(name: string): Promise<Category> {
   return data
 }
 
+/** Its products follow the new name, since they reference it by id. */
+export async function renameCategory(id: number, name: string): Promise<Category> {
+  const { data } = await api.put<Category>(`/categories/${id}`, { name })
+  return data
+}
+
 /** Deletes the label only — its products survive, uncategorised. */
 export async function deleteCategory(id: number): Promise<void> {
   await api.delete(`/categories/${id}`)

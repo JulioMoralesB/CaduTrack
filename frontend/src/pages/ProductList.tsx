@@ -61,8 +61,8 @@ type Dialog =
 /** Main screen: everything in the house, soonest to expire first. */
 export function ProductList() {
   const { products, loading, error, unreachable, cachedAt, reload, replaceProduct, removeProduct } = useProducts()
-  const categories = useCategories()
-  const nameSuggestions = useNameSuggestions()
+  const { categories, reload: reloadCategories } = useCategories()
+  const { suggestions: nameSuggestions, reload: reloadNameSuggestions } = useNameSuggestions()
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' })
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -183,6 +183,18 @@ export function ProductList() {
   }
 
   const dismissUndo = useCallback(() => setLastConsumed(null), [])
+
+  /** Everything showing a category name or id has to catch up — see #144.
+   *  A filter on a category that no longer exists would show an empty list
+   *  under a select that can't display why. */
+  const handleCategoriesChanged = async (deletedId?: number) => {
+    if (deletedId !== undefined) {
+      setFilters((current) => (current.categoryId === deletedId ? { ...current, categoryId: 'all' } : current))
+      void reloadNameSuggestions()
+    }
+    reload()
+    await reloadCategories()
+  }
 
   const handleLabelsChanged = () => {
     reload()
@@ -451,7 +463,15 @@ export function ProductList() {
         />
       )}
 
-      {dialog.kind === 'settings' && <SettingsDialog onClose={close} onIconsReassigned={reload} />}
+      {dialog.kind === 'settings' && (
+        <SettingsDialog
+          categories={categories}
+          products={products}
+          onClose={close}
+          onIconsReassigned={reload}
+          onCategoriesChanged={handleCategoriesChanged}
+        />
+      )}
 
       {dialog.kind === 'history' && <ProductHistory onClose={close} onRestored={reload} />}
 

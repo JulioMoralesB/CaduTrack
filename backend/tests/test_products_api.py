@@ -101,7 +101,7 @@ def test_non_positive_quantity_is_rejected(api_client):
 def test_unknown_category_is_rejected_with_a_useful_message(api_client):
     response = api_client.post("/products", json=_product(category_id=9999))
     assert response.status_code == 422
-    assert "9999" in response.json()["detail"]
+    assert response.json()["detail"] == "Esa categoría ya no existe. Elige otra."
 
 
 def test_replacing_a_product_clears_omitted_fields(api_client):
