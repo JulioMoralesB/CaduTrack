@@ -184,6 +184,15 @@ export function ProductList() {
 
   const dismissUndo = useCallback(() => setLastConsumed(null), [])
 
+  /** After anything that adds, changes or removes a product row — see #167:
+   *  the suggestions describe the most recent row for each name, and the app
+   *  can stay open on a phone for days. Consuming and restoring don't need
+   *  this, since suggestions include consumed rows anyway. */
+  const reloadWithSuggestions = () => {
+    reload()
+    void reloadNameSuggestions()
+  }
+
   /** Everything showing a category name or id has to catch up — see #144.
    *  A filter on a category that no longer exists would show an empty list
    *  under a select that can't display why. */
@@ -197,7 +206,7 @@ export function ProductList() {
   }
 
   const handleLabelsChanged = () => {
-    reload()
+    reloadWithSuggestions()
     refreshLabelScans()
   }
 
@@ -208,7 +217,7 @@ export function ProductList() {
 
   const handleSaved = () => {
     close()
-    reload()
+    reloadWithSuggestions()
   }
 
   const handleReceiptSelected = (event: ChangeEvent<HTMLInputElement>) => {
@@ -238,7 +247,7 @@ export function ProductList() {
   // one place responsible for keeping either in sync after a drop or a
   // resolve, whether the trip dialog is still open or already closed.
   const handleTripChanged = () => {
-    reload()
+    reloadWithSuggestions()
     void getCurrentTrip().then(setCurrentTrip)
   }
 
@@ -249,7 +258,7 @@ export function ProductList() {
       try {
         await deleteProduct(product.id)
         close()
-        reload()
+        reloadWithSuggestions()
       } catch (caught) {
         setDeleteError(toErrorMessage(caught))
       } finally {

@@ -237,6 +237,24 @@ describe('creating a product', () => {
     await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
   })
 
+  it('offers a name as soon as it has been saved — see #167', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    mockedCreate.mockResolvedValue(product({ name: 'Huevos' }))
+
+    render(<ProductList />)
+    await openCreateForm()
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Huevos' } })
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    mockedNameSuggestions.mockResolvedValue([{ name: 'Huevos', category_id: null, location: 'fridge', shelf_days: 7 }])
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument())
+
+    await openCreateForm()
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Hue' } })
+
+    expect(await screen.findByRole('button', { name: 'Huevos' })).toBeInTheDocument()
+  })
+
   it('sends empty optional fields as null rather than empty strings', async () => {
     mockedList.mockResolvedValue({ products: [], cachedAt: null })
     mockedCreate.mockResolvedValue(product())
@@ -337,6 +355,8 @@ describe('deleting a product', () => {
 
     await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith(1))
     await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+    // The initial load and the refresh after deleting — see #167.
+    await waitFor(() => expect(mockedNameSuggestions).toHaveBeenCalledTimes(2))
   })
 })
 
