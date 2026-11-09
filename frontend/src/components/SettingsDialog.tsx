@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { ThemePicker } from '@/components/ThemePicker'
+import { useAutosave } from '@/hooks/useAutosave'
 import { toErrorMessage } from '@/services/api'
 import { reassignIcons } from '@/services/productsService'
 import { getSettings, saveIconSettings, saveSettings, triggerAlert } from '@/services/settingsService'
-import type { SettingsResponse } from '@/services/types'
+import type { AlertSettingsPayload, IconSettingsPayload, SettingsResponse } from '@/services/types'
 import { APP_VERSION } from '@/version'
 
 interface SettingsDialogProps {
@@ -50,10 +51,31 @@ function versionSummary(backendVersion?: string): { text: string; mismatch: bool
   return { text: `Frontend ${APP_VERSION} · API ${backendVersion} — no coinciden`, mismatch: true }
 }
 
+/** Long enough that typing "14" doesn't save "1" first, and reschedule the
+ *  daily job for it, on the way there. */
+const SAVE_DELAY_MS = 600
+
+/** What the alert fields would send, or why they can't send it yet. Mid-edit
+ *  values (a cleared time, an empty number) are normal, not failures. */
+function validateAlerts(
+  enabled: boolean,
+  alertTime: string,
+  daysAhead: string,
+): { payload: AlertSettingsPayload } | { problem: string } {
+  if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(alertTime)) return { problem: 'Elige una hora.' }
+  const days = Number(daysAhead)
+  if (daysAhead.trim() === '' || !Number.isInteger(days) || days < 1 || days > 365) {
+    return { problem: 'Los días de anticipación van de 1 a 365.' }
+  }
+  return { payload: { enabled, alert_time: alertTime, days_ahead: days } }
+}
+
 /** Alert preferences, the icon-assignment toggle, and a way to check delivery
- *  actually works. Two backend resources (see PUT /settings and PUT
- *  /settings/icons), one screen, one Guardar — the split exists to protect
- *  each setting from the other's payload, not to make the user click twice. */
+ *  actually works. Every change saves itself, the same as the theme picker —
+ *  see #146: a Guardar below the fold made it easy to change the alert time
+ *  and close without saving. Two backend resources (see PUT /settings and
+ *  PUT /settings/icons), each with its own autosave, so neither ever has to
+ *  resend the other's values. */
 export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogProps) {
   const [current, setCurrent] = useState<SettingsResponse | null>(null)
   const [enabled, setEnabled] = useState(true)
@@ -61,11 +83,23 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
   const [daysAhead, setDaysAhead] = useState('7')
   const [aiEnabled, setAiEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [alertProblem, setAlertProblem] = useState<string | null>(null)
+  // Set when closing found a change that couldn't be saved: the first close
+  // stays open to say so, the next one leaves — offline must not be a trap.
+  const [closeBlocked, setCloseBlocked] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [reassigning, setReassigning] = useState(false)
   const [reassignResult, setReassignResult] = useState<string | null>(null)
+
+  const persistAlerts = useCallback(async (payload: AlertSettingsPayload) => {
+    // The response carries the rescheduled next run, for the hint below.
+    setCurrent(await saveSettings(payload))
+  }, [])
+  const persistIcons = useCallback((payload: IconSettingsPayload) => saveIconSettings(payload), [])
+
+  const alerts = useAutosave(persistAlerts, SAVE_DELAY_MS)
+  const icons = useAutosave(persistIcons, SAVE_DELAY_MS)
 
   useEffect(() => {
     let active = true
@@ -87,32 +121,34 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
     }
   }, [])
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault()
-    setSaving(true)
-    setError(null)
-    setTestResult(null)
+  const changeAlerts = (next: { enabled?: boolean; alertTime?: string; daysAhead?: string }) => {
+    const values = { enabled, alertTime, daysAhead, ...next }
+    setEnabled(values.enabled)
+    setAlertTime(values.alertTime)
+    setDaysAhead(values.daysAhead)
+    setCloseBlocked(false)
 
+    const result = validateAlerts(values.enabled, values.alertTime, values.daysAhead)
+    if ('problem' in result) {
+      setAlertProblem(result.problem)
+      alerts.cancel()
+    } else {
+      setAlertProblem(null)
+      alerts.schedule(result.payload)
+    }
+  }
+
+  const changeAiEnabled = (value: boolean) => {
+    setAiEnabled(value)
+    setCloseBlocked(false)
+    icons.schedule({ ai_enabled: value })
+  }
+
+  const handleClose = () => {
     void (async () => {
-      try {
-        // Independent resources, saved together because the dialog only
-        // shows one Guardar button — not because the backend expects them
-        // to arrive as one payload. Either can fail without the other having
-        // partially applied, since each is its own request.
-        await Promise.all([
-          saveSettings({ enabled, alert_time: alertTime, days_ahead: Number(daysAhead) }),
-          saveIconSettings({ ai_enabled: aiEnabled }),
-        ])
-        // Close on success, as every other app does. The rescheduled next run
-        // is still shown on the next open; keeping the dialog up to display it
-        // traded the expected behaviour for a confirmation nobody asked for.
-        onClose()
-      } catch (caught) {
-        // A failure is the case that genuinely needs the dialog to stay put.
-        setError(toErrorMessage(caught))
-      } finally {
-        setSaving(false)
-      }
+      const [alertsSaved, iconsSaved] = await Promise.all([alerts.flush(), icons.flush()])
+      if ((alertsSaved && iconsSaved) || closeBlocked) onClose()
+      else setCloseBlocked(true)
     })()
   }
 
@@ -122,8 +158,11 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
     setError(null)
     void (async () => {
       try {
-        const result = await triggerAlert()
-        setTestResult(result.detail)
+        // The test should use what's on screen, not what was saved last.
+        if (await alerts.flush()) {
+          const result = await triggerAlert()
+          setTestResult(result.detail)
+        }
       } catch (caught) {
         setError(toErrorMessage(caught))
       } finally {
@@ -138,6 +177,8 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
     setError(null)
     void (async () => {
       try {
+        // Reassigning reads the AI toggle, which may still be on its way.
+        if (!(await icons.flush())) return
         const result = await reassignIcons()
         setReassignResult(
           result.considered === 0
@@ -155,14 +196,22 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
 
   const version = versionSummary(current?.backend_version)
 
+  const versionLine = (
+    <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
+  )
+
+  const saveError = alerts.error ?? icons.error
+  const saving = alerts.status === 'saving' || icons.status === 'saving'
+  const saved = alerts.status === 'saved' || icons.status === 'saved'
+
   return (
-    <Modal title="Ajustes" onClose={onClose}>
+    <Modal title="Ajustes" onClose={handleClose}>
       {current === null && !error && <p className="state state--loading">Cargando…</p>}
 
       <ThemePicker />
 
       {current !== null && (
-        <form className="form" onSubmit={handleSubmit}>
+        <div className="form">
           <p className={`settings__status settings__status--${current.telegram_configured ? 'ok' : 'missing'}`}>
             {current.telegram_configured
               ? 'Telegram configurado'
@@ -170,14 +219,14 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
           </p>
 
           <label className="form__field form__field--inline">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            <input type="checkbox" checked={enabled} onChange={(e) => changeAlerts({ enabled: e.target.checked })} />
             <span>Enviar la alerta diaria automáticamente</span>
           </label>
 
           <div className="form__row">
             <label className="form__field">
               <span>Hora</span>
-              <input type="time" value={alertTime} onChange={(e) => setAlertTime(e.target.value)} required />
+              <input type="time" value={alertTime} onChange={(e) => changeAlerts({ alertTime: e.target.value })} />
             </label>
 
             <label className="form__field">
@@ -185,13 +234,18 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
               <input
                 type="number"
                 value={daysAhead}
-                onChange={(e) => setDaysAhead(e.target.value)}
+                onChange={(e) => changeAlerts({ daysAhead: e.target.value })}
                 min="1"
                 max="365"
-                required
               />
             </label>
           </div>
+
+          {alertProblem && (
+            <p className="form__error" role="alert">
+              {alertProblem}
+            </p>
+          )}
 
           <p className="settings__hint">
             {current.next_run_at
@@ -208,7 +262,7 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
           </p>
 
           <label className="form__field form__field--inline">
-            <input type="checkbox" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
+            <input type="checkbox" checked={aiEnabled} onChange={(e) => changeAiEnabled(e.target.checked)} />
             <span>Asignar icono con IA cuando la tabla local no reconozca el producto</span>
           </label>
 
@@ -228,15 +282,33 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
           )}
           {testResult && <p className="settings__hint">{testResult}</p>}
 
-          <div className="form__actions">
-            <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
-              {testing ? 'Enviando…' : 'Enviar prueba'}
-            </button>
-            <button type="submit" className="button--primary" disabled={saving}>
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
+          {versionLine}
+
+          {/* Pinned, the same as ProductForm's — see #142: this sheet is far
+              taller than a phone screen, and whether a change saved has to be
+              visible from wherever it was made. */}
+          <div className="form__footer">
+            {saveError ? (
+              <p className="form__error" role="alert">
+                No se guardó: {saveError}
+                {closeBlocked && ' Cierra otra vez para salir sin guardar.'}
+              </p>
+            ) : (
+              <p className="settings__save-status" role="status">
+                {saving ? 'Guardando…' : saved ? 'Guardado' : ''}
+              </p>
+            )}
+            <div className="form__actions">
+              <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
+                {testing ? 'Enviando…' : 'Enviar prueba'}
+              </button>
+              {/* Not "Cerrar": the modal's own × already carries that name. */}
+              <button type="button" className="button--primary" onClick={handleClose}>
+                Listo
+              </button>
+            </div>
           </div>
-        </form>
+        </div>
       )}
 
       {current === null && error && (
@@ -245,7 +317,7 @@ export function SettingsDialog({ onClose, onIconsReassigned }: SettingsDialogPro
         </p>
       )}
 
-      <p className={`settings__version${version.mismatch ? ' settings__version--mismatch' : ''}`}>{version.text}</p>
+      {current === null && versionLine}
     </Modal>
   )
 }

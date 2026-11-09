@@ -67,61 +67,131 @@ describe('SettingsDialog', () => {
     expect(screen.getByLabelText(/Asignar icono con IA/)).toBeChecked()
   })
 
-  it('saves what the user changed', async () => {
+  it('saves a change by itself, without a Guardar', async () => {
     mockedGet.mockResolvedValue(response())
 
     renderDialog()
     fireEvent.change(await screen.findByLabelText('Hora'), { target: { value: '19:45' } })
-    fireEvent.change(screen.getByLabelText('Días de anticipación'), { target: { value: '3' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
-    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
-    expect(mockedSave).toHaveBeenCalledWith({ enabled: true, alert_time: '19:45', days_ahead: 3 })
+    expect(screen.queryByRole('button', { name: 'Guardar' })).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Guardando…')
+    await waitFor(() =>
+      expect(mockedSave).toHaveBeenCalledWith({ enabled: true, alert_time: '19:45', days_ahead: 7 }),
+    )
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Guardado'))
+    expect(mockedSaveIcons).not.toHaveBeenCalled()
   })
 
-  it('saves the icon toggle through its own endpoint, alongside the alert save', async () => {
-    mockedGet.mockResolvedValue(response({ icons: { ai_enabled: true, updated_at: '2026-08-30T00:00:00Z' } }))
+  it('sends one save for a burst of changes, with the last values', async () => {
+    mockedGet.mockResolvedValue(response())
+
+    renderDialog()
+    const days = await screen.findByLabelText('Días de anticipación')
+    fireEvent.change(days, { target: { value: '1' } })
+    fireEvent.change(days, { target: { value: '14' } })
+    fireEvent.change(screen.getByLabelText('Hora'), { target: { value: '19:45' } })
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledWith({ enabled: true, alert_time: '19:45', days_ahead: 14 })
+  })
+
+  it('saves the icon toggle through its own endpoint, leaving the alerts alone', async () => {
+    mockedGet.mockResolvedValue(response())
 
     renderDialog()
     fireEvent.click(await screen.findByLabelText(/Asignar icono con IA/))
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(mockedSaveIcons).toHaveBeenCalledWith({ ai_enabled: false }))
-    // Both requests fire, not one instead of the other.
-    expect(mockedSave).toHaveBeenCalledTimes(1)
+    expect(mockedSave).not.toHaveBeenCalled()
   })
 
-  it('closes once the save succeeds', async () => {
-    // Leaving it open reads as "nothing happened", which is what every other
-    // app taught the user to expect otherwise.
+  it('shows the rescheduled next alert once saved', async () => {
+    mockedGet.mockResolvedValue(response())
+    mockedSave.mockResolvedValue(response({ next_run_at: null }))
+
+    renderDialog()
+    fireEvent.change(await screen.findByLabelText('Hora'), { target: { value: '19:45' } })
+
+    expect(await screen.findByText('No hay ninguna alerta programada.')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['an empty number', 'Días de anticipación', '', 'Los días de anticipación van de 1 a 365.'],
+    ['a number out of range', 'Días de anticipación', '400', 'Los días de anticipación van de 1 a 365.'],
+    ['a cleared time', 'Hora', '', 'Elige una hora.'],
+  ])('says why and sends nothing for %s', async (_case, label, value, message) => {
     mockedGet.mockResolvedValue(response())
     const { onClose } = renderDialog()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
+    fireEvent.change(await screen.findByLabelText(label), { target: { value } })
 
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+    fireEvent.click(screen.getByRole('button', { name: 'Listo' }))
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(mockedSave).not.toHaveBeenCalled()
   })
 
-  it('stays open with the reason when the alert save fails', async () => {
+  it('sends a change still waiting before closing', async () => {
+    mockedGet.mockResolvedValue(response())
+    const { onClose } = renderDialog()
+
+    fireEvent.change(await screen.findByLabelText('Hora'), { target: { value: '19:45' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Listo' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(mockedSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes right away when nothing changed, without saving', async () => {
+    mockedGet.mockResolvedValue(response())
+    const { onClose } = renderDialog()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Listo' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(mockedSave).not.toHaveBeenCalled()
+    expect(mockedSaveIcons).not.toHaveBeenCalled()
+  })
+
+  it('stays open with the reason when a save fails, and a second close leaves', async () => {
     mockedGet.mockResolvedValue(response())
     mockedSave.mockRejectedValue(new Error('boom'))
     const { onClose } = renderDialog()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
+    fireEvent.change(await screen.findByLabelText('Hora'), { target: { value: '19:45' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Listo' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se guardó: Ocurrió un error inesperado.')
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Cierra otra vez'))
     expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Listo' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
-  it('stays open with the reason when the icon-toggle save fails', async () => {
+  it('stays open when the icon-toggle save fails', async () => {
     mockedGet.mockResolvedValue(response())
     mockedSaveIcons.mockRejectedValue(new Error('boom'))
     const { onClose } = renderDialog()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Guardar' }))
+    fireEvent.click(await screen.findByLabelText(/Asignar icono con IA/))
+    fireEvent.click(screen.getByRole('button', { name: 'Listo' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se guardó')
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('saves what is on screen before sending a test alert', async () => {
+    mockedGet.mockResolvedValue(response())
+    mockedTrigger.mockResolvedValue({ sent: true, products: 1, detail: 'Enviado' })
+    renderDialog()
+
+    fireEvent.change(await screen.findByLabelText('Días de anticipación'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar prueba' }))
+
+    await waitFor(() => expect(mockedTrigger).toHaveBeenCalledTimes(1))
+    expect(mockedSave.mock.invocationCallOrder[0]).toBeLessThan(mockedTrigger.mock.invocationCallOrder[0])
   })
 
   it('warns when Telegram is unconfigured and blocks the test send', async () => {
