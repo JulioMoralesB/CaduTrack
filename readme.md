@@ -92,7 +92,8 @@ cadutrack/
 | notes       | text                              |
 | created_at  | timestamp                         |
 | updated_at  | timestamp                         |
-| consumed_at | timestamp, nullable — set by "mark consumed", cleared by "restore" |
+| consumed_at | timestamp, nullable — set when it leaves the list (eaten or thrown out), cleared by "restore" |
+| spoiled     | boolean — true when it was thrown out rather than eaten |
 
 ### Other tables
 

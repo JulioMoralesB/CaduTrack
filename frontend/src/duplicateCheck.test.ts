@@ -28,6 +28,7 @@ function product(overrides: Partial<Product> = {}): Product {
     created_at: '2026-09-01T12:00:00Z',
     updated_at: '2026-09-01T12:00:00Z',
     consumed_at: null,
+    spoiled: false,
     days_until_expiry: 9,
     status: 'fresh',
     ...overrides,

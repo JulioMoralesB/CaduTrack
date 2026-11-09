@@ -32,7 +32,43 @@ function formatConsumedAt(iso: string): string {
   })
 }
 
-/** History of consumed products, with a way to undo a mistaken tap. See #31. */
+interface MonthGroup {
+  key: string
+  title: string
+  products: Product[]
+}
+
+/** Newest month first, in the viewer's own calendar. The list arrives newest
+ *  first already, so each month's rows are together. */
+function groupByMonth(products: Product[]): MonthGroup[] {
+  const groups: MonthGroup[] = []
+  for (const product of products) {
+    // Never null for a row from /products/history — see the backend endpoint.
+    const date = new Date(product.consumed_at as string)
+    const key = `${date.getFullYear()}-${date.getMonth()}`
+    let group = groups.find((candidate) => candidate.key === key)
+    if (!group) {
+      const title = date.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+      group = { key, title: title.charAt(0).toUpperCase() + title.slice(1), products: [] }
+      groups.push(group)
+    }
+    group.products.push(product)
+  }
+  return groups
+}
+
+/** "2 consumidos · 1 se echó a perder", leaving out whichever is zero. */
+function monthCounts(products: Product[]): string {
+  const spoiled = products.filter((product) => product.spoiled).length
+  const consumed = products.length - spoiled
+  const parts = []
+  if (consumed > 0) parts.push(consumed === 1 ? '1 consumido' : `${consumed} consumidos`)
+  if (spoiled > 0) parts.push(spoiled === 1 ? '1 se echó a perder' : `${spoiled} se echaron a perder`)
+  return parts.join(' · ')
+}
+
+/** Everything that has left the list, by month, eaten or thrown out, with a
+ *  way to undo a mistaken tap. See #31 and #145. */
 export function ProductHistory({ onClose, onRestored }: ProductHistoryProps) {
   const [products, setProducts] = useState<Product[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -71,7 +107,7 @@ export function ProductHistory({ onClose, onRestored }: ProductHistoryProps) {
   }
 
   return (
-    <Modal title="Historial de consumidos" onClose={onClose}>
+    <Modal title="Historial" onClose={onClose}>
       {products === null && !error && <p className="state state--loading">Cargando…</p>}
 
       {error && (
@@ -85,33 +121,42 @@ export function ProductHistory({ onClose, onRestored }: ProductHistoryProps) {
       )}
 
       {products !== null && products.length > 0 && (
-        <ul className="product-history">
-          {products.map((product) => (
-            <li key={product.id} className="product-history__row">
-              <span className="product-history__icon" aria-hidden="true">
-                {product.icon}
-              </span>
-              <span className="product-history__details">
-                <span className="product-history__name">{product.name}</span>
-                <span className="product-history__meta">
-                  {quantityLabel(product.quantity, product.unit)}
-                  {/* consumed_at is never null for a row returned by
-                      /products/history — see the backend endpoint. */}
-                  {product.consumed_at && ` · ${formatConsumedAt(product.consumed_at)}`}
-                </span>
-              </span>
-              <button
-                type="button"
-                className="button--icon"
-                onClick={() => handleRestore(product)}
-                disabled={restoringId === product.id}
-                aria-label={`Restaurar ${product.name}`}
-              >
-                {restoringId === product.id ? 'Restaurando…' : 'Restaurar'}
-              </button>
-            </li>
+        <div className="product-history">
+          {groupByMonth(products).map((group) => (
+            <section key={group.key} className="product-history__month">
+              <header className="product-history__month-header">
+                <h3>{group.title}</h3>
+                <p>{monthCounts(group.products)}</p>
+              </header>
+              <ul>
+                {group.products.map((product) => (
+                  <li key={product.id} className="product-history__row">
+                    <span className="product-history__icon" aria-hidden="true">
+                      {product.icon}
+                    </span>
+                    <span className="product-history__details">
+                      <span className="product-history__name">{product.name}</span>
+                      <span className="product-history__meta">
+                        {quantityLabel(product.quantity, product.unit)}
+                        {product.consumed_at && ` · ${formatConsumedAt(product.consumed_at)}`}
+                      </span>
+                      {product.spoiled && <span className="product-history__spoiled">Se echó a perder</span>}
+                    </span>
+                    <button
+                      type="button"
+                      className="button--icon"
+                      onClick={() => handleRestore(product)}
+                      disabled={restoringId === product.id}
+                      aria-label={`Restaurar ${product.name}`}
+                    >
+                      {restoringId === product.id ? 'Restaurando…' : 'Restaurar'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       {restoreError && (

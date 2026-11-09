@@ -35,6 +35,8 @@ export interface Product {
   /** Null while active. Set only by POST /products/{id}/consume, cleared only
    *  by POST /products/{id}/restore — see productsService.ts. */
   consumed_at: string | null
+  /** True when it left by being thrown out rather than eaten — see #145. */
+  spoiled: boolean
   /** Negative once expired. */
   days_until_expiry: number
   status: ExpiryStatus
@@ -64,6 +66,7 @@ export type ProductPayload = Omit<
   | 'created_at'
   | 'updated_at'
   | 'consumed_at'
+  | 'spoiled'
   | 'days_until_expiry'
   | 'status'
 >

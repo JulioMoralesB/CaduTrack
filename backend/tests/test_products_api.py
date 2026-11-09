@@ -587,6 +587,60 @@ def test_history_lists_only_consumed_products_most_recent_first(api_client):
     assert all(p["consumed_at"] is not None for p in history)
 
 
+def test_spoiling_a_product_moves_it_to_history_recorded_as_spoiled(api_client):
+    product_id = api_client.post("/products", json=_product(name="Yogur")).json()["id"]
+
+    response = api_client.post(f"/products/{product_id}/spoil")
+
+    assert response.status_code == 200
+    assert response.json()["spoiled"] is True
+    assert response.json()["consumed_at"] is not None
+    assert api_client.get("/products").json() == []
+    assert [p["spoiled"] for p in api_client.get("/products/history").json()] == [True]
+
+
+def test_a_consumed_product_is_not_recorded_as_spoiled(api_client):
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+
+    assert api_client.post(f"/products/{product_id}/consume").json()["spoiled"] is False
+
+
+def test_a_product_reports_not_spoiled_until_it_is(api_client):
+    assert api_client.post("/products", json=_product()).json()["spoiled"] is False
+
+
+@pytest.mark.parametrize("first,second", [("consume", "spoil"), ("spoil", "consume"), ("spoil", "spoil")])
+def test_a_product_already_out_of_the_list_cannot_leave_again(api_client, first, second):
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+    api_client.post(f"/products/{product_id}/{first}")
+
+    assert api_client.post(f"/products/{product_id}/{second}").status_code == 409
+
+
+def test_restoring_a_spoiled_product_clears_the_mark(api_client):
+    """Otherwise consuming it later would look spoiled until overwritten, and
+    an active product would report spoiled in the meantime."""
+    product_id = api_client.post("/products", json=_product()).json()["id"]
+    api_client.post(f"/products/{product_id}/spoil")
+
+    restored = api_client.post(f"/products/{product_id}/restore").json()
+
+    assert restored["spoiled"] is False
+    assert restored["consumed_at"] is None
+
+
+def test_spoiling_a_missing_product_is_404(api_client):
+    assert api_client.post("/products/9999/spoil").status_code == 404
+
+
+def test_a_spoil_cannot_be_smuggled_in_through_create_or_replace(api_client):
+    created = api_client.post("/products", json=_product(spoiled=True)).json()
+    assert created["spoiled"] is False
+
+    replaced = api_client.put(f"/products/{created['id']}", json=_product(spoiled=True)).json()
+    assert replaced["spoiled"] is False
+
+
 def test_history_is_empty_until_something_is_consumed(api_client):
     api_client.post("/products", json=_product())
     assert api_client.get("/products/history").json() == []

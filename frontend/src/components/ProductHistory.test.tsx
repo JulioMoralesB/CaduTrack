@@ -29,6 +29,7 @@ function product(overrides: Partial<Product> = {}): Product {
     created_at: '2026-08-20T00:00:00Z',
     updated_at: '2026-08-20T00:00:00Z',
     consumed_at: '2026-08-24T15:30:00Z',
+    spoiled: false,
     days_until_expiry: -6,
     status: 'expired',
     ...overrides,
@@ -94,5 +95,65 @@ describe('ProductHistory', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(screen.getByText('Queso')).toBeInTheDocument()
     expect(onRestored).not.toHaveBeenCalled()
+  })
+})
+
+describe('ProductHistory spoiled food — see #145', () => {
+  it('marks what was thrown out and only that', async () => {
+    mockedHistory.mockResolvedValue([
+      product({ id: 1, name: 'Yogur', spoiled: true }),
+      product({ id: 2, name: 'Queso', spoiled: false }),
+    ])
+
+    renderHistory()
+
+    const yogur = (await screen.findByText('Yogur')).closest('li')
+    const queso = screen.getByText('Queso').closest('li')
+    expect(yogur).toHaveTextContent('Se echó a perder')
+    expect(queso).not.toHaveTextContent('Se echó a perder')
+  })
+
+  it('groups by month with a count of each kind, newest first', async () => {
+    mockedHistory.mockResolvedValue([
+      product({ id: 1, name: 'Yogur', consumed_at: '2026-09-20T15:00:00Z', spoiled: true }),
+      product({ id: 2, name: 'Queso', consumed_at: '2026-09-18T15:00:00Z' }),
+      product({ id: 3, name: 'Leche', consumed_at: '2026-09-10T15:00:00Z' }),
+      product({ id: 4, name: 'Arroz', consumed_at: '2026-08-05T15:00:00Z', spoiled: true }),
+    ])
+
+    renderHistory()
+
+    await screen.findByText('Yogur')
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      'Septiembre de 2026',
+      'Agosto de 2026',
+    ])
+    expect(screen.getByText('2 consumidos · 1 se echó a perder')).toBeInTheDocument()
+    expect(screen.getByText('1 se echó a perder')).toBeInTheDocument()
+  })
+
+  it('pluralizes the counts', async () => {
+    mockedHistory.mockResolvedValue([
+      product({ id: 1, consumed_at: '2026-09-20T15:00:00Z', spoiled: true }),
+      product({ id: 2, consumed_at: '2026-09-19T15:00:00Z', spoiled: true }),
+      product({ id: 3, consumed_at: '2026-09-18T15:00:00Z' }),
+    ])
+
+    renderHistory()
+
+    expect(await screen.findByText('1 consumido · 2 se echaron a perder')).toBeInTheDocument()
+  })
+
+  it('updates the month count when something is restored', async () => {
+    mockedHistory.mockResolvedValue([
+      product({ id: 1, name: 'Yogur', consumed_at: '2026-09-20T15:00:00Z', spoiled: true }),
+      product({ id: 2, name: 'Queso', consumed_at: '2026-09-18T15:00:00Z' }),
+    ])
+    mockedRestore.mockResolvedValue(product({ id: 1, consumed_at: null }))
+
+    renderHistory()
+    fireEvent.click(await screen.findByRole('button', { name: 'Restaurar Yogur' }))
+
+    expect(await screen.findByText('1 consumido')).toBeInTheDocument()
   })
 })

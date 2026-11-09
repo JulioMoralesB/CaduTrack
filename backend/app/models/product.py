@@ -5,6 +5,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -101,6 +102,10 @@ class Product(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    # Which way it left, once consumed_at is set: thrown out rather than eaten.
+    # See #145. A flag next to consumed_at, not a second timestamp, so every
+    # query that already means "still in the fridge" stays correct as it is.
+    spoiled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     category: Mapped[Category | None] = relationship(back_populates="products")
 
