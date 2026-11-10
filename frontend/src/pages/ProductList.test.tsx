@@ -327,6 +327,62 @@ describe('editing a product', () => {
   })
 })
 
+describe('reloading after a change — see #171', () => {
+  it('keeps the list and the open card on screen while the fresh list loads', async () => {
+    const existing = product({ id: 7, name: 'Yogur griego' })
+    mockedList.mockResolvedValueOnce({ products: [existing], cachedAt: null })
+    // The reload after saving, held open so what's on screen meanwhile can be checked.
+    let finishReload: (result: { products: Product[]; cachedAt: null }) => void = () => {}
+    mockedList.mockImplementationOnce(() => new Promise((resolve) => (finishReload = resolve)))
+    mockedReplace.mockResolvedValue(existing)
+
+    render(<ProductList />)
+    await expandCard('Yogur griego')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Yogur griego' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(screen.queryByText('Cargando…')).not.toBeInTheDocument()
+    expect(headingNames()).toEqual(['Yogur griego'])
+    // Still expanded: the card was never unmounted.
+    expect(screen.getByRole('button', { name: 'Editar Yogur griego' })).toBeInTheDocument()
+
+    finishReload({ products: [{ ...existing, name: 'Yogur natural' }], cachedAt: null })
+
+    await waitFor(() => expect(headingNames()).toEqual(['Yogur natural']))
+    expect(screen.getByRole('button', { name: 'Editar Yogur natural' })).toBeInTheDocument()
+  })
+
+  it('takes a deleted product off the list without waiting for the reload', async () => {
+    mockedList.mockResolvedValueOnce({
+      products: [product(), product({ id: 2, name: 'Huevos' })],
+      cachedAt: null,
+    })
+    mockedList.mockImplementationOnce(() => new Promise(() => {}))
+    mockedDelete.mockResolvedValue(undefined)
+
+    render(<ProductList />)
+    await expandCard('Leche entera')
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar Leche entera' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
+
+    await waitFor(() => expect(headingNames()).toEqual(['Huevos']))
+    expect(screen.queryByText('Cargando…')).not.toBeInTheDocument()
+  })
+
+  it('still says it is loading when retrying after a failure', async () => {
+    mockedList.mockRejectedValueOnce(new Error('boom'))
+    mockedList.mockImplementationOnce(() => new Promise(() => {}))
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByText('Cargando…')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
 describe('deleting a product', () => {
   it('asks before deleting and does nothing on cancel', async () => {
     mockedList.mockResolvedValue({ products: [product()], cachedAt: null })

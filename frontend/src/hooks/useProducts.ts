@@ -6,6 +6,11 @@ import type { Product, ProductFilters } from '@/services/types'
 
 interface UseProductsResult {
   products: Product[]
+  /**
+   * True only while there is nothing to show yet: the first load, and a
+   * retry out of the error state. A reload with rows already on screen
+   * leaves them there — see #171.
+   */
   loading: boolean
   error: string | null
   /**
@@ -47,10 +52,20 @@ interface UseProductsResult {
  * when the filters change, the current rows stay on screen while the new ones
  * load instead of flashing a spinner. For a list you are reading in front of
  * an open fridge, that is the better behaviour anyway.
+ *
+ * The same goes for reload(), deliberately — see #171. It used to swap the
+ * whole list for "Cargando…" on every save, delete and undo, which on a
+ * phone threw the scroll position back to the top and closed whichever card
+ * was open.
  */
 export function useProducts(filters: ProductFilters = {}): UseProductsResult {
   const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
+  // A request the user is waiting on: the first load, or a reload() they
+  // (or something they did) asked for. The quiet refreshes further down
+  // never set it.
+  const [pending, setPending] = useState(true)
+  // Whether any list has arrived yet, empty or not.
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [unreachable, setUnreachable] = useState(false)
   const [cachedAt, setCachedAt] = useState<Date | null>(null)
@@ -71,6 +86,7 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
           setCachedAt(result.cachedAt)
           setError(null)
           setUnreachable(false)
+          setLoaded(true)
         }
       } catch (caught) {
         if (active) {
@@ -78,7 +94,7 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
           setUnreachable(isUnreachable(caught))
         }
       } finally {
-        if (active) setLoading(false)
+        if (active) setPending(false)
       }
     })()
 
@@ -89,13 +105,15 @@ export function useProducts(filters: ProductFilters = {}): UseProductsResult {
     }
   }, [filterKey, reloadNonce])
 
-  // An event handler, not an effect, so setting state here is fine.
+  // An event handler, not an effect, so setting state here is fine. The
+  // error is left in place until the answer comes back: it's what tells
+  // `loading` below that there is no list on screen to keep.
   const reload = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    setUnreachable(false)
+    setPending(true)
     setReloadNonce((nonce) => nonce + 1)
   }, [])
+
+  const loading = pending && (!loaded || error !== null)
 
   // Escaping a stale list should not need a manual reload.
   //
