@@ -677,6 +677,206 @@ def test_filters_still_apply_within_the_active_list_once_something_is_consumed(a
     assert api_client.get("/products", params={"location": "fridge"}).json() == []
 
 
+# ── Consuming part of a product (#172) ────────────────────────────────────────
+
+
+def _six_yogurts(api_client) -> int:
+    return api_client.post("/products", json=_product(name="Yogurt", quantity="6.00", unit="piezas")).json()["id"]
+
+
+def _eat(api_client, product_id: int, quantity: str = "1"):
+    return api_client.post(f"/products/{product_id}/consume", json={"quantity": quantity})
+
+
+def test_a_new_product_has_nothing_consumed_yet(api_client):
+    assert api_client.post("/products", json=_product()).json()["consumed_quantity"] == "0.00"
+
+
+def test_consuming_part_of_a_product_keeps_the_rest_on_the_list(api_client):
+    product_id = _six_yogurts(api_client)
+
+    response = _eat(api_client, product_id)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["quantity"] == "5.00"
+    assert body["consumed_quantity"] == "1.00"
+    assert body["consumed_at"] is None
+    assert [p["id"] for p in api_client.get("/products").json()] == [product_id]
+    assert api_client.get("/products/history").json() == []
+
+
+def test_the_last_of_a_product_takes_it_to_history_with_all_that_was_eaten(api_client):
+    """What #172 is for: six yogurts eaten one at a time read as six in
+    Historial, not as the single one that happened to be last."""
+    product_id = _six_yogurts(api_client)
+    for _ in range(5):
+        _eat(api_client, product_id)
+
+    last = _eat(api_client, product_id).json()
+
+    assert last["consumed_at"] is not None
+    assert Decimal(last["consumed_quantity"]) + Decimal(last["quantity"]) == Decimal(6)
+    assert api_client.get("/products").json() == []
+
+
+def test_consuming_all_that_is_left_keeps_count_of_what_was_eaten_before(api_client):
+    product_id = _six_yogurts(api_client)
+    _eat(api_client, product_id)
+    _eat(api_client, product_id)
+
+    finished = api_client.post(f"/products/{product_id}/consume").json()
+
+    assert finished["consumed_at"] is not None
+    assert finished["consumed_quantity"] == "2.00"
+    assert finished["quantity"] == "4.00"
+
+
+def test_asking_for_more_than_is_left_finishes_the_product(api_client):
+    """A phone whose list is a tap behind asks for one of what it thinks are
+    two; the last one must go to Historial, not be refused."""
+    product_id = api_client.post("/products", json=_product(quantity="1.00")).json()["id"]
+
+    finished = _eat(api_client, product_id, "5").json()
+
+    assert finished["consumed_at"] is not None
+    assert finished["quantity"] == "1.00"
+    assert finished["consumed_quantity"] == "0.00"
+
+
+def test_throwing_out_the_rest_keeps_what_was_eaten(api_client):
+    product_id = _six_yogurts(api_client)
+    for _ in range(4):
+        _eat(api_client, product_id)
+
+    spoiled = api_client.post(f"/products/{product_id}/spoil").json()
+
+    assert spoiled["spoiled"] is True
+    assert spoiled["consumed_quantity"] == "4.00"
+    assert spoiled["quantity"] == "2.00"
+
+
+def test_a_part_can_be_put_back(api_client):
+    """The undo of a mistaken tap: without it the only way back is "+", which
+    would leave Historial counting something nobody ate."""
+    product_id = _six_yogurts(api_client)
+    _eat(api_client, product_id)
+
+    response = api_client.post(f"/products/{product_id}/restore", json={"quantity": "1"})
+
+    assert response.status_code == 200
+    assert response.json()["quantity"] == "6.00"
+    assert response.json()["consumed_quantity"] == "0.00"
+
+
+def test_more_than_was_eaten_cannot_be_put_back(api_client):
+    product_id = _six_yogurts(api_client)
+    _eat(api_client, product_id)
+
+    response = api_client.post(f"/products/{product_id}/restore", json={"quantity": "2"})
+
+    assert response.status_code == 409
+    unchanged = api_client.get(f"/products/{product_id}").json()
+    assert (unchanged["quantity"], unchanged["consumed_quantity"]) == ("5.00", "1.00")
+
+
+def test_restoring_from_history_undoes_only_the_last_step(api_client):
+    product_id = _six_yogurts(api_client)
+    _eat(api_client, product_id)
+    api_client.post(f"/products/{product_id}/consume")
+
+    restored = api_client.post(f"/products/{product_id}/restore").json()
+
+    assert restored["consumed_at"] is None
+    assert restored["quantity"] == "5.00"
+    assert restored["consumed_quantity"] == "1.00"
+
+
+@pytest.mark.parametrize("action", ["consume", "restore"])
+def test_a_product_in_history_takes_no_part_changes(api_client, action):
+    product_id = _six_yogurts(api_client)
+    _eat(api_client, product_id)
+    api_client.post(f"/products/{product_id}/consume")
+
+    response = api_client.post(f"/products/{product_id}/{action}", json={"quantity": "1"})
+
+    assert response.status_code == 409
+    unchanged = api_client.get(f"/products/{product_id}").json()
+    assert (unchanged["quantity"], unchanged["consumed_quantity"]) == ("5.00", "1.00")
+    assert unchanged["consumed_at"] is not None
+
+
+@pytest.mark.parametrize("action", ["consume", "restore"])
+@pytest.mark.parametrize("quantity", ["0", "-1"])
+def test_a_part_has_to_be_more_than_nothing(api_client, action, quantity):
+    product_id = _six_yogurts(api_client)
+
+    response = api_client.post(f"/products/{product_id}/{action}", json={"quantity": quantity})
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("action", ["consume", "restore"])
+def test_a_part_of_a_missing_product_is_404(api_client, action):
+    assert api_client.post(f"/products/9999/{action}", json={"quantity": "1"}).status_code == 404
+
+
+def test_correcting_the_quantity_does_not_count_as_eating(api_client):
+    """The card's "−" and the form fix a wrong number; only Consumido says
+    something was eaten."""
+    product_id = _six_yogurts(api_client)
+
+    api_client.patch(f"/products/{product_id}/quantity", json={"delta": "-1"})
+    replaced = api_client.put(f"/products/{product_id}", json=_product(quantity="3.00")).json()
+
+    assert replaced["quantity"] == "3.00"
+    assert replaced["consumed_quantity"] == "0.00"
+
+
+def test_what_was_eaten_cannot_be_set_through_create_or_replace(api_client):
+    created = api_client.post("/products", json=_product(consumed_quantity="4.00")).json()
+    assert created["consumed_quantity"] == "0.00"
+
+    replaced = api_client.put(f"/products/{created['id']}", json=_product(consumed_quantity="4.00")).json()
+    assert replaced["consumed_quantity"] == "0.00"
+
+
+def test_concurrent_single_units_are_each_counted(api_client):
+    """Same shape as test_concurrent_decrements_do_not_lose_an_update, and for
+    the same reason: two taps that overlap must both land, in what is left
+    and in what was eaten."""
+    from app.db.session import SessionLocal
+    from app.routers.products import consume_product
+    from app.schemas.product import ProductPortion
+
+    rounds = 20
+    product_id = api_client.post("/products", json=_product(quantity="100.00")).json()["id"]
+    errors: list[BaseException] = []
+
+    def eat_one_via_own_session(start: threading.Barrier) -> None:
+        session = SessionLocal()
+        try:
+            start.wait(timeout=5)
+            consume_product(product_id, ProductPortion(quantity=Decimal("1")), session)
+        except BaseException as exc:  # noqa: BLE001 - surfaced on the main thread below
+            errors.append(exc)
+        finally:
+            session.close()
+
+    for _ in range(rounds):
+        barrier = threading.Barrier(2)
+        threads = [threading.Thread(target=eat_one_via_own_session, args=(barrier,)) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+    assert not errors, errors
+    product = api_client.get(f"/products/{product_id}").json()
+    assert product["quantity"] == f"{Decimal(100) - rounds * 2:.2f}"
+    assert product["consumed_quantity"] == f"{Decimal(rounds * 2):.2f}"
+
+
 # ── Name suggestions (#133) ───────────────────────────────────────────────────
 
 

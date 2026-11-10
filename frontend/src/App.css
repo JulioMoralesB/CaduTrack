@@ -147,6 +147,29 @@
   font-size: 0.8125rem;
 }
 
+/* "How much?", under the row, when Consumido has more than one unit to ask
+   about — see #172. Its buttons line up under the one that opened it. */
+.product-card__portion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.product-card__portion > button {
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.product-card__portion > .product-card__portion-cancel {
+  padding: 0 0.5rem;
+  border-color: transparent;
+  background: none;
+  color: var(--text-muted);
+}
+
 .product-card__icon-button {
   /* 44x44 — a row that's tapped standing at the fridge. The emoji itself
      stays the same visual size; this only grows the hit area around it. */

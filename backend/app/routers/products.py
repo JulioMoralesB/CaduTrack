@@ -2,6 +2,7 @@
 
 import logging
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select, update
@@ -18,6 +19,7 @@ from app.schemas.product import (
     ProductCreate,
     ProductIconUpdate,
     ProductNameSuggestion,
+    ProductPortion,
     ProductQuantityDelta,
     ProductRead,
     ProductUpdate,
@@ -288,16 +290,51 @@ def _remove_from_list(db: Session, product_id: int, *, spoiled: bool) -> Product
     return product
 
 
-@router.post("/{product_id}/consume", response_model=ProductRead)
-def consume_product(product_id: int, db: Session = Depends(get_db)) -> Product:
-    """Mark a product as consumed, moving it from the active list to history.
+def _consume_part(db: Session, product_id: int, quantity: Decimal) -> Product:
+    """Eat some of a product and leave the rest on the list — see #172.
 
-    Not a PATCH with a body: there is nothing to send, and the action is not
-    idempotent the way a value-setting PATCH is — see the 409 below, and
-    productsService.ts's consumeProduct, which is deliberately not retried for
-    the same reason as delete: a repeat that follows a success would 409, and
-    the user would be shown an error for an action that already worked.
+    One UPDATE reading and writing both columns against the row's live values,
+    for the same reason adjust_quantity does: two taps that overlap must both
+    land. It only matches while something would be left over; the last of a
+    product, or a request for more than there is, takes it off the list
+    instead — a phone whose list is a tap behind means "the one that's left",
+    and refusing it would leave an eaten product on the list.
     """
+    product = _get_or_404(db, product_id)
+
+    result = db.execute(
+        update(Product)
+        .where(Product.id == product_id, Product.consumed_at.is_(None), Product.quantity > quantity)
+        .values(
+            quantity=Product.quantity - quantity,
+            consumed_quantity=Product.consumed_quantity + quantity,
+        )
+    )
+    if result.rowcount == 0:
+        return _remove_from_list(db, product_id, spoiled=False)
+
+    db.commit()
+    db.refresh(product)
+    logger.info("Consumed %s of product %s (%s), %s left", quantity, product.id, product.name, product.quantity)
+    return product
+
+
+@router.post("/{product_id}/consume", response_model=ProductRead)
+def consume_product(
+    product_id: int, payload: ProductPortion | None = None, db: Session = Depends(get_db)
+) -> Product:
+    """Mark a product as consumed, moving it from the active list to history —
+    or, given a quantity, only that much of it, the rest staying on the list
+    (see _consume_part).
+
+    Not a PATCH: the action is not idempotent the way a value-setting PATCH
+    is — see the 409 in _remove_from_list, and productsService.ts's
+    consumeProduct, which is deliberately not retried for the same reason as
+    delete: a repeat that follows a success would 409, or eat a second unit,
+    and the user would be shown an error for an action that already worked.
+    """
+    if payload is not None:
+        return _consume_part(db, product_id, payload.quantity)
     return _remove_from_list(db, product_id, spoiled=False)
 
 
@@ -308,9 +345,53 @@ def spoil_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     return _remove_from_list(db, product_id, spoiled=True)
 
 
+def _put_back_part(db: Session, product_id: int, quantity: Decimal) -> Product:
+    """Undo _consume_part: what was counted as eaten goes back to what is left.
+
+    Guarded the same way, in the UPDATE itself. It never reaches into a
+    product in history — restoring that one is the whole-product path below —
+    and never puts back more than was eaten.
+    """
+    product = _get_or_404(db, product_id)
+
+    result = db.execute(
+        update(Product)
+        .where(
+            Product.id == product_id,
+            Product.consumed_at.is_(None),
+            Product.consumed_quantity >= quantity,
+        )
+        .values(
+            quantity=Product.quantity + quantity,
+            consumed_quantity=Product.consumed_quantity - quantity,
+        )
+    )
+    if result.rowcount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Eso ya no se puede deshacer: el producto cambió desde entonces.",
+        )
+
+    db.commit()
+    db.refresh(product)
+    logger.info("Put back %s of product %s (%s), %s left", quantity, product.id, product.name, product.quantity)
+    return product
+
+
 @router.post("/{product_id}/restore", response_model=ProductRead)
-def restore_product(product_id: int, db: Session = Depends(get_db)) -> Product:
-    """Undo a consumed mark, returning a product to the active list."""
+def restore_product(
+    product_id: int, payload: ProductPortion | None = None, db: Session = Depends(get_db)
+) -> Product:
+    """Undo a consumed mark, returning a product to the active list — or,
+    given a quantity, undo having eaten that much of one still on it.
+
+    Restoring from history undoes only the step that took the product off the
+    list: what was eaten before that stays counted, since `quantity` still
+    holds exactly what that last step took.
+    """
+    if payload is not None:
+        return _put_back_part(db, product_id, payload.quantity)
+
     product = _get_or_404(db, product_id)
     if product.consumed_at is None:
         raise HTTPException(

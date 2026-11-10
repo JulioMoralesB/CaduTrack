@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canStepDown, stepQuantity } from '@/quantity'
+import { addQuantities, canStepDown, stepQuantity } from '@/quantity'
 
 describe('stepQuantity', () => {
   it('increments a whole number', () => {
@@ -60,5 +60,19 @@ describe('canStepDown', () => {
   it('is true above 1, including a value that is not itself a whole number', () => {
     expect(canStepDown('1.50')).toBe(true)
     expect(canStepDown('5')).toBe(true)
+  })
+})
+
+describe('addQuantities — see #172', () => {
+  it('adds what was eaten before to what the last step took', () => {
+    expect(addQuantities('5.00', '1.00')).toBe('6')
+  })
+
+  it('keeps cents exact where float addition would not', () => {
+    expect(addQuantities('0.10', '0.20')).toBe('0.3')
+  })
+
+  it('leaves a quantity as it was when nothing was eaten before', () => {
+    expect(addQuantities('1.25', '0.00')).toBe('1.25')
   })
 })

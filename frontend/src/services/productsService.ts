@@ -82,16 +82,24 @@ export async function listConsumedProducts(): Promise<Product[]> {
 }
 
 /**
- * Mark a product as consumed, moving it from the active list to history.
+ * Mark a product as consumed, moving it from the active list to history —
+ * or, given a quantity, only that much of it: the rest stays on the list,
+ * unless that was the last of it (see #172; the answer's consumed_at says
+ * which happened).
  *
  * Not retried, on the same reasoning as deleteProduct above: a repeat that
  * follows a consume which actually succeeded gets a 409 (the backend rejects
- * consuming an already-consumed product), and the user would be shown an
- * error for an action that worked.
+ * consuming an already-consumed product) or eats a second unit, and the user
+ * would be shown an error for an action that worked.
  */
-export async function consumeProduct(id: number): Promise<Product> {
-  const { data } = await api.post<Product>(`/products/${id}/consume`)
+export async function consumeProduct(id: number, quantity?: number): Promise<Product> {
+  const { data } = await api.post<Product>(`/products/${id}/consume`, portion(quantity))
   return data
+}
+
+/** The body for acting on part of a product; none at all for the whole. */
+function portion(quantity: number | undefined): { quantity: number } | undefined {
+  return quantity === undefined ? undefined : { quantity }
 }
 
 /** Mark a product as thrown out rather than eaten — see #145. Not retried,
@@ -101,10 +109,11 @@ export async function spoilProduct(id: number): Promise<Product> {
   return data
 }
 
-/** Undo a consumed or spoiled mark, returning a product to the active list. Not
+/** Undo a consumed or spoiled mark, returning a product to the active list —
+ *  or, given a quantity, undo having eaten that much of one still on it. Not
  *  retried, for the same reason as consumeProduct. */
-export async function restoreProduct(id: number): Promise<Product> {
-  const { data } = await api.post<Product>(`/products/${id}/restore`)
+export async function restoreProduct(id: number, quantity?: number): Promise<Product> {
+  const { data } = await api.post<Product>(`/products/${id}/restore`, portion(quantity))
   return data
 }
 

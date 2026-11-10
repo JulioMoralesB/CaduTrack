@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductCard } from '@/components/ProductCard'
@@ -38,6 +38,7 @@ function product(overrides: Partial<Product> = {}): Product {
     updated_at: '2026-08-29T00:00:00Z',
     consumed_at: null,
     spoiled: false,
+    consumed_quantity: '0.00',
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
@@ -47,6 +48,7 @@ function product(overrides: Partial<Product> = {}): Product {
 function renderCard(overrides: Partial<Product> = {}) {
   const onProductChanged = vi.fn()
   const onConsumed = vi.fn()
+  const onPartConsumed = vi.fn()
   render(
     <ul>
       <ProductCard
@@ -55,16 +57,24 @@ function renderCard(overrides: Partial<Product> = {}) {
         onDelete={vi.fn()}
         onProductChanged={onProductChanged}
         onConsumed={onConsumed}
+        onPartConsumed={onPartConsumed}
       />
     </ul>,
   )
-  return { onProductChanged, onConsumed }
+  return { onProductChanged, onConsumed, onPartConsumed }
+}
+
+/** The button in the heading that opens and closes the details. Found by
+ *  where it is, not by being the one expandable button: Consumido is one too
+ *  when it has a question to open — see #172. */
+function toggle() {
+  return within(screen.getByRole('heading', { level: 2 })).getByRole('button')
 }
 
 /** Opens the card's details, where the stepper, Editar and Eliminar live —
  *  see #140. */
 function expand() {
-  fireEvent.click(screen.getByRole('button', { expanded: false }))
+  fireEvent.click(toggle())
 }
 
 describe('ProductCard quantity stepper', () => {
@@ -299,9 +309,11 @@ describe('ProductCard icon override', () => {
 })
 
 describe('ProductCard consume action', () => {
+  // A single unit throughout: with more than one the button asks first, see
+  // the #172 tests below.
   it('calls the API and notifies the parent with the product id', async () => {
     mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))
-    const { onConsumed } = renderCard()
+    const { onConsumed } = renderCard({ quantity: '1.00' })
 
     fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
 
@@ -316,7 +328,7 @@ describe('ProductCard consume action', () => {
         resolveRequest = resolve
       }),
     )
-    renderCard()
+    renderCard({ quantity: '1.00' })
 
     fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
 
@@ -329,7 +341,7 @@ describe('ProductCard consume action', () => {
 
   it('shows the failure inline and does not notify the parent', async () => {
     mockedConsume.mockRejectedValue(new Error('nope'))
-    const { onConsumed } = renderCard()
+    const { onConsumed } = renderCard({ quantity: '1.00' })
 
     fireEvent.click(screen.getByRole('button', { name: /marcar plátano como consumido/i }))
 
@@ -352,7 +364,7 @@ describe('ProductCard compact layout — see #140', () => {
   it('keeps the stepper, Editar and Eliminar out of the way until expanded', () => {
     renderCard()
 
-    expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument()
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('button', { name: 'Editar Plátano' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Eliminar Plátano' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Aumentar cantidad de Plátano' })).not.toBeInTheDocument()
@@ -361,15 +373,15 @@ describe('ProductCard compact layout — see #140', () => {
   it('expands to show category, notes and every action, and collapses again', () => {
     renderCard({ category: { id: 3, name: 'Frutas', created_at: '2026-08-29T00:00:00Z' }, notes: 'maduros' })
 
-    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    fireEvent.click(toggle())
 
-    expect(screen.getByRole('button', { expanded: true })).toBeInTheDocument()
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Frutas')).toBeInTheDocument()
     expect(screen.getByText('maduros')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Editar Plátano' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Eliminar Plátano' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { expanded: true }))
+    fireEvent.click(toggle())
 
     expect(screen.queryByRole('button', { name: 'Editar Plátano' })).not.toBeInTheDocument()
   })
@@ -377,7 +389,7 @@ describe('ProductCard compact layout — see #140', () => {
   it('names a missing category instead of leaving a gap', () => {
     renderCard({ category: null })
 
-    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    fireEvent.click(toggle())
 
     expect(screen.getByText('Sin categoría')).toBeInTheDocument()
   })
@@ -388,10 +400,10 @@ describe('ProductCard compact layout — see #140', () => {
     const target = product()
     render(
       <ul>
-        <ProductCard product={target} onEdit={onEdit} onDelete={onDelete} onProductChanged={vi.fn()} onConsumed={vi.fn()} />
+        <ProductCard product={target} onEdit={onEdit} onDelete={onDelete} onProductChanged={vi.fn()} onConsumed={vi.fn()} onPartConsumed={vi.fn()} />
       </ul>,
     )
-    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    fireEvent.click(toggle())
 
     fireEvent.click(screen.getByRole('button', { name: 'Editar Plátano' }))
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar Plátano' }))
@@ -453,5 +465,100 @@ describe('ProductCard spoiled action — see #145', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(onConsumed).not.toHaveBeenCalled()
+  })
+})
+
+describe('ProductCard with more than one left — see #172', () => {
+  const consumeButton = { name: /marcar plátano como consumido/i }
+  const question = { name: '¿Cuánto consumiste de Plátano?' }
+
+  it('asks how much before doing anything', () => {
+    renderCard({ quantity: '3.00' })
+
+    fireEvent.click(screen.getByRole('button', consumeButton))
+
+    const choice = within(screen.getByRole('group', question))
+    expect(choice.getByRole('button', { name: 'Solo 1' })).toBeInTheDocument()
+    expect(choice.getByRole('button', { name: 'Todo (3 piezas)' })).toBeInTheDocument()
+    expect(mockedConsume).not.toHaveBeenCalled()
+  })
+
+  it('takes one off and keeps the card', async () => {
+    const oneLess = product({ quantity: '2.00', consumed_quantity: '1.00' })
+    mockedConsume.mockResolvedValue(oneLess)
+    const { onPartConsumed, onConsumed } = renderCard({ quantity: '3.00' })
+
+    fireEvent.click(screen.getByRole('button', consumeButton))
+    fireEvent.click(screen.getByRole('button', { name: 'Solo 1' }))
+
+    await waitFor(() => expect(onPartConsumed).toHaveBeenCalledWith(oneLess))
+    expect(mockedConsume).toHaveBeenCalledWith(1, 1)
+    expect(onConsumed).not.toHaveBeenCalled()
+    expect(screen.queryByRole('group', question)).not.toBeInTheDocument()
+  })
+
+  it('takes all of it off the list', async () => {
+    mockedConsume.mockResolvedValue(product({ consumed_at: '2026-11-10T12:00:00Z' }))
+    const { onPartConsumed, onConsumed } = renderCard({ quantity: '3.00' })
+
+    fireEvent.click(screen.getByRole('button', consumeButton))
+    fireEvent.click(screen.getByRole('button', { name: /^Todo/ }))
+
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1, false))
+    expect(mockedConsume).toHaveBeenCalledWith(1)
+    expect(onPartConsumed).not.toHaveBeenCalled()
+  })
+
+  it('leaves the list when the one taken turns out to have been the last', async () => {
+    // Another phone got there first: the server answers with the product
+    // finished rather than with one less.
+    mockedConsume.mockResolvedValue(product({ quantity: '1.00', consumed_at: '2026-11-10T12:00:00Z' }))
+    const { onPartConsumed, onConsumed } = renderCard({ quantity: '2.00' })
+
+    fireEvent.click(screen.getByRole('button', consumeButton))
+    fireEvent.click(screen.getByRole('button', { name: 'Solo 1' }))
+
+    await waitFor(() => expect(onConsumed).toHaveBeenCalledWith(1, false))
+    expect(onPartConsumed).not.toHaveBeenCalled()
+  })
+
+  it('asks for a quantity that is not whole too, as long as one fits in it', () => {
+    renderCard({ quantity: '1.50', unit: 'kg' })
+
+    fireEvent.click(screen.getByRole('button', consumeButton))
+
+    expect(screen.getByRole('button', { name: 'Todo (1.5 kg)' })).toBeInTheDocument()
+  })
+
+  it.each(['Cancelar', 'Consumido'])('backs out with %s, without a request', (label) => {
+    renderCard({ quantity: '3.00' })
+    fireEvent.click(screen.getByRole('button', consumeButton))
+
+    fireEvent.click(screen.getByText(label))
+
+    expect(screen.queryByRole('group', question)).not.toBeInTheDocument()
+    expect(mockedConsume).not.toHaveBeenCalled()
+  })
+
+  it('says whether the question is open, for a screen reader', () => {
+    renderCard({ quantity: '3.00' })
+    const button = screen.getByRole('button', consumeButton)
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(button)
+
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('shows the failure and keeps the question open to try again', async () => {
+    mockedConsume.mockRejectedValue(new Error('boom'))
+    const { onPartConsumed } = renderCard({ quantity: '3.00' })
+
+    fireEvent.click(screen.getByRole('button', consumeButton))
+    fireEvent.click(screen.getByRole('button', { name: 'Solo 1' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
+    expect(onPartConsumed).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Solo 1' })).toBeEnabled()
   })
 })

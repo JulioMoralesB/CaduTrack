@@ -78,6 +78,7 @@ function fakeProduct(overrides: Partial<Product> = {}): Product {
     updated_at: '2026-08-29T00:00:00Z',
     consumed_at: null,
     spoiled: false,
+    consumed_quantity: '0.00',
     days_until_expiry: 10,
     status: 'fresh',
     ...overrides,
@@ -173,6 +174,7 @@ describe('ProductForm quantity stepper', () => {
       updated_at: '2026-08-29T00:00:00Z',
       consumed_at: null,
       spoiled: false,
+      consumed_quantity: '0.00',
       days_until_expiry: 5,
       status: 'expiring_soon',
     }
@@ -201,6 +203,7 @@ describe('ProductForm label scan', () => {
       updated_at: '2026-08-29T00:00:00Z',
       consumed_at: null,
       spoiled: false,
+      consumed_quantity: '0.00',
       days_until_expiry: 5,
       status: 'expiring_soon',
     }

@@ -65,6 +65,7 @@ class Product(Base):
             "icon_source IN ('default', 'lookup', 'ai', 'manual')",
             name="ck_products_icon_source",
         ),
+        CheckConstraint("consumed_quantity >= 0", name="ck_products_consumed_quantity_not_negative"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -106,6 +107,14 @@ class Product(Base):
     # See #145. A flag next to consumed_at, not a second timestamp, so every
     # query that already means "still in the fridge" stays correct as it is.
     spoiled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # How much of this purchase was eaten a part at a time, before whatever
+    # finally took it off the list — see #172. `quantity` stays "what is
+    # left" throughout, and once consumed_at is set it is what that last step
+    # took: eaten, or thrown out if `spoiled`. So all that was eaten is this
+    # plus `quantity` for a consumed row, and this alone for a spoiled one.
+    consumed_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, server_default="0"
+    )
 
     category: Mapped[Category | None] = relationship(back_populates="products")
 

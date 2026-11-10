@@ -49,3 +49,12 @@ export function stepQuantity(current: string, delta: 1 | -1): string {
   const next = cents + delta * CENTS_PER_UNIT
   return next > 0 ? fromCents(next) : current
 }
+
+/**
+ * Two quantities as one, in the same cents arithmetic — for a row in
+ * Historial, where all that was eaten is what went a part at a time plus
+ * what the last step took. See #172.
+ */
+export function addQuantities(first: string, second: string): string {
+  return fromCents((toCents(first) ?? 0) + (toCents(second) ?? 0))
+}
