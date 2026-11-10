@@ -7,7 +7,7 @@ import pytest
 
 from app.alerts import format_alert, group_by_location, products_needing_attention, send_expiry_alert
 from app.models import Product
-from app.telegram import TelegramNotConfigured, escape
+from app.telegram import TelegramDeliveryError, TelegramNotConfigured, escape
 
 REFERENCE = date(2026, 9, 1)
 
@@ -162,3 +162,35 @@ def test_trigger_endpoint_says_so_when_telegram_is_unconfigured(api_client, db_s
 
     assert response.status_code == 503
     assert "not configured" in response.json()["detail"]
+
+
+@pytest.mark.integration
+def test_trigger_endpoint_passes_on_why_telegram_rejected_the_alert(api_client, db_session):
+    """A readable 502, not a bare 500 — see #170. What Telegram said is the
+    only clue to what's misconfigured."""
+    db_session.add(_product("Leche", 1))
+    db_session.commit()
+
+    rejected = TelegramDeliveryError(
+        "Telegram rejected the message: HTTP 400 Bad Request: chat not found",
+        status_code=400,
+        reason="Bad Request: chat not found",
+    )
+    with patch("app.alerts.send_message", side_effect=rejected):
+        response = api_client.post("/alerts/trigger")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Telegram rechazó la alerta: Bad Request: chat not found"
+
+
+@pytest.mark.integration
+def test_trigger_endpoint_says_so_when_telegram_cannot_be_reached(api_client, db_session):
+    db_session.add(_product("Leche", 1))
+    db_session.commit()
+
+    unreachable = TelegramDeliveryError("Could not reach Telegram: ConnectError")
+    with patch("app.alerts.send_message", side_effect=unreachable):
+        response = api_client.post("/alerts/trigger")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "No se pudo conectar con Telegram. Inténtalo de nuevo."
