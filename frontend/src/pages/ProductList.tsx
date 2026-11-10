@@ -258,6 +258,9 @@ export function ProductList() {
       try {
         await deleteProduct(product.id)
         close()
+        // Off the list right away rather than once the reload answers — the
+        // rows stay on screen meanwhile now, see #171.
+        removeProduct(product.id)
         reloadWithSuggestions()
       } catch (caught) {
         setDeleteError(toErrorMessage(caught))
