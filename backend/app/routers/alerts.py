@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.alerts import send_expiry_alert
 from app.db.session import get_db
-from app.telegram import TelegramNotConfigured
+from app.telegram import TelegramDeliveryError, TelegramNotConfigured
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,18 @@ def trigger_alert(db: Session = Depends(get_db)) -> dict[str, object]:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
+    except TelegramDeliveryError as exc:
+        # Handled rather than left to become a 500: what Telegram said —
+        # "chat not found", say — is what whoever pressed the button needs
+        # to read, and none of it can hold the request URL. See #170.
+        logger.error("Manual expiry alert failed: %s", exc)
+        if exc.status_code is None:
+            detail = "No se pudo conectar con Telegram. Inténtalo de nuevo."
+        elif exc.reason:
+            detail = f"Telegram rechazó la alerta: {exc.reason}"
+        else:
+            detail = f"Telegram rechazó la alerta (HTTP {exc.status_code})."
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
 
     return {
         "sent": count > 0,
