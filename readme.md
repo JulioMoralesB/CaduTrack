@@ -338,7 +338,10 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-That builds and pushes three multi-arch images:
+That builds and pushes three images, `linux/amd64` only — the server's
+architecture. On an Apple Silicon Mac they still run, emulated; for local
+development build them yourself with `docker compose up -d --build`, which
+produces native images. See #163.
 
 | Image | Contents |
 |-------|----------|

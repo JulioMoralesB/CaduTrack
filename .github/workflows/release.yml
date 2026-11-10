@@ -5,11 +5,25 @@ on:
     tags:
       - 'v*.*.*'
 
+# amd64 only, and no layer cache — see #163.
+#
+# The server is amd64. arm64 was built under QEMU emulation, which took the
+# frontend from about a minute to over ten (npm ci alone ran 9+ minutes) and
+# is where v1.3.0's build hung for six hours.
+#
+# A tag can't restore a cache saved by another tag, only by itself or main,
+# so type=gha never hit: every release built from scratch and then spent
+# 30-50 seconds exporting a cache no later release could read.
+#
+# timeout-minutes is several times a normal run, so a hang fails in minutes
+# instead of after GitHub's six-hour limit.
+
 jobs:
   # ─── Frontend image: the thing you actually visit ────────────────────────────
   frontend:
     name: Build and push frontend image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -19,9 +33,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,7 +58,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -55,8 +66,6 @@ jobs:
           # deployed instance can say which release it actually is. This
           # workflow only runs on a tag push, so ref_name is always that tag.
           build-args: VERSION=${{ github.ref_name }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Generate provenance attestation
         uses: actions/attest-build-provenance@v1
@@ -69,6 +78,7 @@ jobs:
   backend:
     name: Build and push backend image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -78,9 +88,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -106,17 +113,13 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # The tag itself, e.g. "v0.11.0" — read by app/config.py at startup
           # and surfaced through /health and /settings.
           build-args: VERSION=${{ github.ref_name }}
-          # Separate scope from the frontend, or the two jobs evict each
-          # other's layers from the shared Actions cache.
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
 
       - name: Generate provenance attestation
         uses: actions/attest-build-provenance@v1
@@ -132,6 +135,7 @@ jobs:
   db:
     name: Build and push database image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
@@ -141,9 +145,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -169,14 +170,10 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./db
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Separate scope from the other two jobs, or they evict each
-          # other's layers from the shared Actions cache.
-          cache-from: type=gha,scope=db
-          cache-to: type=gha,mode=max,scope=db
 
       - name: Generate provenance attestation
         uses: actions/attest-build-provenance@v1
