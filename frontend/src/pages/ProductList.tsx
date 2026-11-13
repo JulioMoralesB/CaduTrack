@@ -21,7 +21,7 @@ import {
   type SortKey,
 } from '@/filters'
 import { useCategories } from '@/hooks/useCategories'
-import { shortDate } from '@/labels'
+import { quantityLabel, shortDate } from '@/labels'
 import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
 import { apiUrl, toErrorMessage } from '@/services/api'
@@ -77,7 +77,16 @@ export function ProductList() {
   const [labelScans, setLabelScans] = useState<LabelScan[]>([])
   const [uploadingLabels, setUploadingLabels] = useState<{ done: number; total: number } | null>(null)
   const [labelError, setLabelError] = useState<string | null>(null)
-  const [lastConsumed, setLastConsumed] = useState<{ product: Product; spoiled: boolean } | null>(null)
+  // What the undo toast is about: the product as it was just before, and
+  // whether all of it left or only one unit of it (see #172). `turn` tells
+  // one action from the next on the same product, so each gets its own toast.
+  const [lastConsumed, setLastConsumed] = useState<{
+    product: Product
+    spoiled: boolean
+    part: boolean
+    turn: number
+  } | null>(null)
+  const consumeTurns = useRef(0)
   const labelInputRef = useRef<HTMLInputElement>(null)
   const labelsReading = labelScans.some((scan) => scan.status === 'pending')
   const pendingTripCount = currentTrip?.items.filter((item) => item.resolved_at === null).length ?? 0
@@ -174,10 +183,24 @@ export function ProductList() {
   const handleConsumed = (id: number, spoiled: boolean) => {
     const consumed = products.find((product) => product.id === id)
     removeProduct(id)
-    if (consumed) setLastConsumed({ product: consumed, spoiled })
+    consumeTurns.current += 1
+    if (consumed) setLastConsumed({ product: consumed, spoiled, part: false, turn: consumeTurns.current })
   }
 
-  const undoConsume = async (product: Product) => {
+  /** One unit eaten, the rest still there — see #172. The undo matters as
+   *  much here: "+" would put the unit back but leave it counted as eaten. */
+  const handlePartConsumed = (updated: Product) => {
+    const before = products.find((product) => product.id === updated.id)
+    replaceProduct(updated)
+    consumeTurns.current += 1
+    if (before) setLastConsumed({ product: before, spoiled: false, part: true, turn: consumeTurns.current })
+  }
+
+  const undoConsume = async (product: Product, part: boolean) => {
+    if (part) {
+      replaceProduct(await restoreProduct(product.id, 1))
+      return
+    }
     await restoreProduct(product.id)
     reload()
   }
@@ -448,6 +471,7 @@ export function ProductList() {
                   onDelete={(target) => setDialog({ kind: 'delete', product: target })}
                   onProductChanged={replaceProduct}
                   onConsumed={handleConsumed}
+                  onPartConsumed={handlePartConsumed}
                 />
               ))}
             </ul>
@@ -501,11 +525,14 @@ export function ProductList() {
 
       {lastConsumed && (
         <UndoToast
-          key={lastConsumed.product.id}
+          key={lastConsumed.turn}
           // Name last, not "X marcado como…": no agreement to get wrong for
           // a feminine or plural name.
-          message={`${lastConsumed.spoiled ? 'Se echó a perder' : 'Consumido'}: ${lastConsumed.product.name}`}
-          onUndo={() => undoConsume(lastConsumed.product)}
+          message={
+            `${lastConsumed.spoiled ? 'Se echó a perder' : 'Consumido'}: ${lastConsumed.product.name}` +
+            (lastConsumed.part ? ` (1 de ${quantityLabel(lastConsumed.product.quantity, null)})` : '')
+          }
+          onUndo={() => undoConsume(lastConsumed.product, lastConsumed.part)}
           onDismiss={dismissUndo}
         />
       )}

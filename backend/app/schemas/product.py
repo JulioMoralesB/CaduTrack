@@ -90,6 +90,16 @@ class ProductQuantityDelta(BaseModel):
     delta: Decimal = Field(max_digits=10, decimal_places=2)
 
 
+class ProductPortion(BaseModel):
+    """Part of a product, for eating it a unit at a time — see #172.
+
+    Optional on POST /products/{id}/consume and /restore: without it they act
+    on the whole product, as they always have; with it, on this much of it.
+    """
+
+    quantity: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+
+
 class ProductRead(ProductBase):
     """A product as returned by the API."""
 
@@ -114,6 +124,9 @@ class ProductRead(ProductBase):
     # Whether it left by being thrown out rather than eaten — see #145. Same
     # as consumed_at: only ever set through its own endpoints.
     spoiled: bool = False
+    # What was eaten a part at a time before the product left the list — see
+    # #172 and the model. Only ever changed by /consume and /restore.
+    consumed_quantity: Decimal = Decimal(0)
 
     @computed_field
     @property

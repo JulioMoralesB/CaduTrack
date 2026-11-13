@@ -30,6 +30,7 @@ function product(overrides: Partial<Product> = {}): Product {
     updated_at: '2026-08-20T00:00:00Z',
     consumed_at: '2026-08-24T15:30:00Z',
     spoiled: false,
+    consumed_quantity: '0.00',
     days_until_expiry: -6,
     status: 'expired',
     ...overrides,
@@ -155,5 +156,41 @@ describe('ProductHistory spoiled food — see #145', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Restaurar Yogur' }))
 
     expect(await screen.findByText('1 consumido')).toBeInTheDocument()
+  })
+})
+
+describe('ProductHistory for something eaten a part at a time — see #172', () => {
+  it('shows all that was eaten, not just the last of it', async () => {
+    mockedHistory.mockResolvedValue([
+      product({ name: 'Yogurt', quantity: '1.00', consumed_quantity: '5.00', unit: 'piezas' }),
+    ])
+
+    renderHistory()
+
+    const row = (await screen.findByText('Yogurt')).closest('li')
+    expect(row).toHaveTextContent(/^.*6 piezas ·/)
+    expect(row).not.toHaveTextContent('1 piezas')
+  })
+
+  it('splits what was eaten from what was thrown out', async () => {
+    mockedHistory.mockResolvedValue([
+      product({ name: 'Yogurt', quantity: '2.00', consumed_quantity: '4.00', unit: 'piezas', spoiled: true }),
+    ])
+
+    renderHistory()
+
+    const row = (await screen.findByText('Yogurt')).closest('li')
+    expect(row).toHaveTextContent('6 piezas ·')
+    expect(row).toHaveTextContent('Consumido: 4 · Se echó a perder: 2')
+  })
+
+  it('says only that it was thrown out when none of it was eaten', async () => {
+    mockedHistory.mockResolvedValue([product({ name: 'Yogurt', quantity: '6.00', spoiled: true })])
+
+    renderHistory()
+
+    const row = (await screen.findByText('Yogurt')).closest('li')
+    expect(row).toHaveTextContent('Se echó a perder')
+    expect(row).not.toHaveTextContent('Consumido:')
   })
 })

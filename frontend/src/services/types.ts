@@ -37,6 +37,10 @@ export interface Product {
   consumed_at: string | null
   /** True when it left by being thrown out rather than eaten — see #145. */
   spoiled: boolean
+  /** How much was eaten a part at a time, before whatever took the product
+   *  off the list — see #172. `quantity` is what is left, and for a row in
+   *  history what that last step took. Same format as `quantity`. */
+  consumed_quantity: string
   /** Negative once expired. */
   days_until_expiry: number
   status: ExpiryStatus
@@ -70,6 +74,7 @@ export type ProductPayload = Omit<
   | 'updated_at'
   | 'consumed_at'
   | 'spoiled'
+  | 'consumed_quantity'
   | 'days_until_expiry'
   | 'status'
 >

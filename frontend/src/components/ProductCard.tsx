@@ -17,6 +17,9 @@ interface ProductCardProps {
   /** Called with the id after the product leaves the list, eaten or thrown
    *  out — the row goes away entirely rather than being updated in place. */
   onConsumed: (id: number, spoiled: boolean) => void
+  /** Called with the server's response after one unit was eaten and the rest
+   *  stays — the row is updated in place, and the list offers the undo. */
+  onPartConsumed: (updated: Product) => void
 }
 
 /**
@@ -26,8 +29,19 @@ interface ProductCardProps {
  * summary line plus the action used most, Consumido. Tapping the name
  * expands the rest in place (category, notes, quantity stepper, Editar,
  * Eliminar), an accordion rather than a separate screen.
+ *
+ * Consumido is one tap for a single unit. With more than one left it asks
+ * first — one, or all of it — see #172: it used to send all six yogurts to
+ * Historial for the one that was eaten.
  */
-export function ProductCard({ product, onEdit, onDelete, onProductChanged, onConsumed }: ProductCardProps) {
+export function ProductCard({
+  product,
+  onEdit,
+  onDelete,
+  onProductChanged,
+  onConsumed,
+  onPartConsumed,
+}: ProductCardProps) {
   const [expanded, setExpanded] = useState(false)
   const detailsId = `product-${product.id}-details`
 
@@ -38,9 +52,18 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
   const [savingIcon, setSavingIcon] = useState(false)
   const [iconError, setIconError] = useState<string | null>(null)
 
-  // Which of the two ways out is in flight, if any.
-  const [leaving, setLeaving] = useState<'consumed' | 'spoiled' | null>(null)
+  // Which of the ways out is in flight, if any.
+  const [leaving, setLeaving] = useState<'consumed' | 'spoiled' | 'one' | null>(null)
   const [consumeError, setConsumeError] = useState<string | null>(null)
+
+  // The same test as the stepper's "−": more than one unit, so taking one
+  // leaves something on the list. Anything else is eaten in one go.
+  const severalLeft = canStepDown(product.quantity)
+  const [choosingPortion, setChoosingPortion] = useState(false)
+  const portionId = `product-${product.id}-portion`
+  // Asked for, and still a question worth asking: the quantity can drop to
+  // one under an open question, when its own "Solo 1" answers come back.
+  const askingPortion = choosingPortion && severalLeft
 
   const adjustQuantity = (delta: 1 | -1) => {
     setAdjustingQuantity(true)
@@ -93,6 +116,25 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
     })()
   }
 
+  const consumeOne = () => {
+    setLeaving('one')
+    setConsumeError(null)
+    void (async () => {
+      try {
+        const updated = await consumeProduct(product.id, 1)
+        setChoosingPortion(false)
+        // The server's word on whether anything is left: a list that was a
+        // tap behind can ask for one of two and get the last one.
+        if (updated.consumed_at === null) onPartConsumed(updated)
+        else onConsumed(product.id, false)
+      } catch (caught) {
+        setConsumeError(toErrorMessage(caught))
+      } finally {
+        setLeaving(null)
+      }
+    })()
+  }
+
   return (
     <li className={`product-card product-card--${product.status}${expanded ? ' product-card--expanded' : ''}`}>
       <div className="product-card__row">
@@ -133,13 +175,44 @@ export function ProductCard({ product, onEdit, onDelete, onProductChanged, onCon
         <button
           type="button"
           className="product-card__consume"
-          onClick={() => leaveList(false)}
+          onClick={severalLeft ? () => setChoosingPortion((current) => !current) : () => leaveList(false)}
           disabled={leaving !== null}
           aria-label={`Marcar ${product.name} como consumido`}
+          // Only where it opens the question; for a single unit it is a
+          // plain action and has nothing to expand.
+          aria-expanded={severalLeft ? askingPortion : undefined}
+          aria-controls={severalLeft ? portionId : undefined}
         >
-          {leaving === 'consumed' ? 'Marcando…' : 'Consumido'}
+          {leaving === 'consumed' && !askingPortion ? 'Marcando…' : 'Consumido'}
         </button>
       </div>
+
+      {askingPortion && (
+        <div
+          id={portionId}
+          className="product-card__portion"
+          role="group"
+          aria-label={`¿Cuánto consumiste de ${product.name}?`}
+        >
+          {/* No visible question: three buttons already fill a phone's width,
+              and right under Consumido they read as its answer. "Solo 1", not
+              "Una": no gender to get wrong for litros or piezas. */}
+          <button type="button" onClick={consumeOne} disabled={leaving !== null}>
+            {leaving === 'one' ? 'Marcando…' : 'Solo 1'}
+          </button>
+          <button type="button" onClick={() => leaveList(false)} disabled={leaving !== null}>
+            {leaving === 'consumed' ? 'Marcando…' : `Todo (${quantityLabel(product.quantity, product.unit)})`}
+          </button>
+          <button
+            type="button"
+            className="product-card__portion-cancel"
+            onClick={() => setChoosingPortion(false)}
+            disabled={leaving !== null}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {editingIcon && (
         <IconPicker

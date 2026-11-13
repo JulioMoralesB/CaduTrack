@@ -86,6 +86,7 @@ function product(overrides: Partial<Product> = {}): Product {
     updated_at: '2026-08-29T00:00:00Z',
     consumed_at: null,
     spoiled: false,
+    consumed_quantity: '0.00',
     days_until_expiry: 5,
     status: 'expiring_soon',
     ...overrides,
@@ -418,7 +419,7 @@ describe('deleting a product', () => {
 
 describe('consuming a product', () => {
   it('removes the card from the list without a full reload', async () => {
-    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+    mockedList.mockResolvedValue({ products: [product({ quantity: '1.00' })], cachedAt: null })
     mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))
 
     render(<ProductList />)
@@ -450,7 +451,7 @@ describe('consuming a product', () => {
   })
 
   it('offers to undo it — see #143', async () => {
-    mockedList.mockResolvedValue({ products: [product()], cachedAt: null })
+    mockedList.mockResolvedValue({ products: [product({ quantity: '1.00' })], cachedAt: null })
     mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))
     mockedRestore.mockResolvedValue(product())
 
@@ -464,6 +465,60 @@ describe('consuming a product', () => {
     // Back from the server through a reload, not re-inserted locally.
     await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.queryByText('Consumido: Leche entera')).not.toBeInTheDocument())
+  })
+})
+
+describe('consuming part of a product — see #172', () => {
+  const yogurts = (quantity: string, eaten = '0.00') =>
+    product({ name: 'Yogurt', quantity, unit: 'piezas', consumed_quantity: eaten })
+
+  async function eatOne() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Yogurt como consumido' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Solo 1' }))
+  }
+
+  it('keeps the product on the list with one less', async () => {
+    mockedList.mockResolvedValue({ products: [yogurts('6.00')], cachedAt: null })
+    mockedConsume.mockResolvedValue(yogurts('5.00', '1.00'))
+
+    render(<ProductList />)
+    await eatOne()
+
+    const card = within(await screen.findByRole('list'))
+    expect(await card.findByText('5 piezas')).toBeInTheDocument()
+    expect(mockedConsume).toHaveBeenCalledWith(1, 1)
+    // Updated in place from the answer, not refetched.
+    expect(mockedList).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers to undo that one, and puts it back without a reload', async () => {
+    mockedList.mockResolvedValue({ products: [yogurts('6.00')], cachedAt: null })
+    mockedConsume.mockResolvedValue(yogurts('5.00', '1.00'))
+    mockedRestore.mockResolvedValue(yogurts('6.00'))
+
+    render(<ProductList />)
+    await eatOne()
+
+    expect(await screen.findByText('Consumido: Yogurt (1 de 6)')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+
+    await waitFor(() => expect(mockedRestore).toHaveBeenCalledWith(1, 1))
+    expect(await within(screen.getByRole('list')).findByText('6 piezas')).toBeInTheDocument()
+    expect(mockedList).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByText(/^Consumido: Yogurt/)).not.toBeInTheDocument())
+  })
+
+  it('starts over for each one eaten, so the undo is for the latest', async () => {
+    mockedList.mockResolvedValue({ products: [yogurts('6.00')], cachedAt: null })
+    mockedConsume.mockResolvedValueOnce(yogurts('5.00', '1.00')).mockResolvedValueOnce(yogurts('4.00', '2.00'))
+
+    render(<ProductList />)
+    await eatOne()
+    await screen.findByText('Consumido: Yogurt (1 de 6)')
+    await eatOne()
+
+    expect(await screen.findByText('Consumido: Yogurt (1 de 5)')).toBeInTheDocument()
+    expect(screen.queryByText('Consumido: Yogurt (1 de 6)')).not.toBeInTheDocument()
   })
 })
 

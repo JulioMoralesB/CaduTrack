@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { quantityLabel } from '@/labels'
+import { addQuantities } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
 import { listConsumedProducts, restoreProduct } from '@/services/productsService'
 import type { Product } from '@/services/types'
@@ -67,8 +68,25 @@ function monthCounts(products: Product[]): string {
   return parts.join(' · ')
 }
 
+/**
+ * How a row left, when it takes more than the plain tag to say — see #172.
+ *
+ * `quantity` is what the last step took and `consumed_quantity` what was
+ * eaten a part at a time before it, so a spoiled row with both was partly
+ * eaten and partly thrown out. Numbers after a colon, not "4 consumidas":
+ * no gender to get wrong for litros or piezas.
+ */
+function howItLeft(product: Product): string | null {
+  if (!product.spoiled) return null
+  if (Number(product.consumed_quantity) === 0) return 'Se echó a perder'
+  const eaten = quantityLabel(product.consumed_quantity, null)
+  const thrownOut = quantityLabel(product.quantity, null)
+  return `Consumido: ${eaten} · Se echó a perder: ${thrownOut}`
+}
+
 /** Everything that has left the list, by month, eaten or thrown out, with a
- *  way to undo a mistaken tap. See #31 and #145. */
+ *  way to undo a mistaken tap. See #31 and #145. Each row shows the whole
+ *  purchase, however many taps it took to finish it — see #172. */
 export function ProductHistory({ onClose, onRestored }: ProductHistoryProps) {
   const [products, setProducts] = useState<Product[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -129,30 +147,34 @@ export function ProductHistory({ onClose, onRestored }: ProductHistoryProps) {
                 <p>{monthCounts(group.products)}</p>
               </header>
               <ul>
-                {group.products.map((product) => (
-                  <li key={product.id} className="product-history__row">
-                    <span className="product-history__icon" aria-hidden="true">
-                      {product.icon}
-                    </span>
-                    <span className="product-history__details">
-                      <span className="product-history__name">{product.name}</span>
-                      <span className="product-history__meta">
-                        {quantityLabel(product.quantity, product.unit)}
-                        {product.consumed_at && ` · ${formatConsumedAt(product.consumed_at)}`}
+                {group.products.map((product) => {
+                  const total = addQuantities(product.quantity, product.consumed_quantity)
+                  const left = howItLeft(product)
+                  return (
+                    <li key={product.id} className="product-history__row">
+                      <span className="product-history__icon" aria-hidden="true">
+                        {product.icon}
                       </span>
-                      {product.spoiled && <span className="product-history__spoiled">Se echó a perder</span>}
-                    </span>
-                    <button
-                      type="button"
-                      className="button--icon"
-                      onClick={() => handleRestore(product)}
-                      disabled={restoringId === product.id}
-                      aria-label={`Restaurar ${product.name}`}
-                    >
-                      {restoringId === product.id ? 'Restaurando…' : 'Restaurar'}
-                    </button>
-                  </li>
-                ))}
+                      <span className="product-history__details">
+                        <span className="product-history__name">{product.name}</span>
+                        <span className="product-history__meta">
+                          {quantityLabel(total, product.unit)}
+                          {product.consumed_at && ` · ${formatConsumedAt(product.consumed_at)}`}
+                        </span>
+                        {left && <span className="product-history__spoiled">{left}</span>}
+                      </span>
+                      <button
+                        type="button"
+                        className="button--icon"
+                        onClick={() => handleRestore(product)}
+                        disabled={restoringId === product.id}
+                        aria-label={`Restaurar ${product.name}`}
+                      >
+                        {restoringId === product.id ? 'Restaurando…' : 'Restaurar'}
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             </section>
           ))}
