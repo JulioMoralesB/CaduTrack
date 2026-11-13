@@ -1,4 +1,5 @@
 import { api } from '@/services/api'
+import { PHOTO_UPLOAD_TIMEOUT_MS } from '@/services/timeouts'
 import type { BarcodeLookupResult } from '@/services/types'
 
 /**
@@ -15,6 +16,7 @@ export async function scanBarcodePhoto(image: Blob): Promise<{ raw: string }> {
   form.append('image', image, 'barcode.jpg')
   const { data } = await api.post<{ raw: string }>('/barcodes/scan-photo', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: PHOTO_UPLOAD_TIMEOUT_MS,
   })
   return data
 }

@@ -1,5 +1,6 @@
 import { api } from '@/services/api'
 import { withRetry } from '@/services/retry'
+import { RECEIPT_READ_TIMEOUT_MS } from '@/services/timeouts'
 import type { ShoppingTrip, ShoppingTripItem } from '@/services/types'
 
 /**
@@ -17,6 +18,7 @@ export async function uploadReceipt(image: Blob): Promise<ShoppingTrip> {
   form.append('image', image, 'receipt.jpg')
   const { data } = await api.post<ShoppingTrip>('/trips/receipt', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: RECEIPT_READ_TIMEOUT_MS,
   })
   return data
 }

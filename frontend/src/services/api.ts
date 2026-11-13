@@ -1,5 +1,7 @@
 import axios, { AxiosError } from 'axios'
 
+import { DEFAULT_TIMEOUT_MS } from '@/services/timeouts'
+
 const UNREACHABLE = 'No se pudo conectar con el servidor.'
 const UNEXPECTED = 'Ocurrió un error inesperado.'
 
@@ -21,10 +23,17 @@ interface ApiErrorBody {
  */
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
-/** Shared Axios instance pointing at the FastAPI backend. */
+/**
+ * Shared Axios instance pointing at the FastAPI backend.
+ *
+ * Every request has a time limit — see #173 and timeouts.ts, which also
+ * holds the longer ones for the few calls that wait on a model or a photo
+ * upload. Axios's own default is none at all.
+ */
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+  timeout: DEFAULT_TIMEOUT_MS,
 })
 
 /**
@@ -40,8 +49,9 @@ export function apiUrl(path: string): string {
 
 /**
  * True when `error` looks like the backend could not be reached at all,
- * rather than reached-and-rejected — no response, a network-level failure
- * code, or a bodyless 5xx from a proxy in between.
+ * rather than reached-and-rejected — no response (a timeout included, see
+ * #173), a network-level failure code, or a bodyless 5xx from a proxy in
+ * between.
  *
  * This bucket is deliberately imprecise: it also covers the failure a
  * Cloudflare Access session expiring produces. Access responds to an

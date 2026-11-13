@@ -1,4 +1,5 @@
 import { api } from '@/services/api'
+import { TELEGRAM_SEND_TIMEOUT_MS } from '@/services/timeouts'
 import type {
   AlertSettingsPayload,
   AlertTriggerResult,
@@ -26,6 +27,8 @@ export async function saveIconSettings(payload: IconSettingsPayload): Promise<Se
 
 /** Send the alert immediately, to check delivery works. */
 export async function triggerAlert(): Promise<AlertTriggerResult> {
-  const { data } = await api.post<AlertTriggerResult>('/alerts/trigger')
+  const { data } = await api.post<AlertTriggerResult>('/alerts/trigger', undefined, {
+    timeout: TELEGRAM_SEND_TIMEOUT_MS,
+  })
   return data
 }
