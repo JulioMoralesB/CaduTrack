@@ -1,4 +1,5 @@
 import { api, apiUrl } from '@/services/api'
+import { PHOTO_UPLOAD_TIMEOUT_MS } from '@/services/timeouts'
 import type { LabelScan } from '@/services/types'
 
 /**
@@ -15,6 +16,7 @@ export async function queueLabelScan(image: Blob): Promise<LabelScan> {
   form.append('image', image, 'label.jpg')
   const { data } = await api.post<LabelScan>('/label-scans', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: PHOTO_UPLOAD_TIMEOUT_MS,
   })
   return data
 }

@@ -1,5 +1,6 @@
 import { api } from '@/services/api'
 import { withRetry } from '@/services/retry'
+import { ICON_LOOKUP_TIMEOUT_MS, ICON_REASSIGN_TIMEOUT_MS } from '@/services/timeouts'
 import type {
   IconReassignmentResult,
   Product,
@@ -50,7 +51,7 @@ export async function listNameSuggestions(): Promise<ProductNameSuggestion[]> {
  * for why a timeout is excluded.
  */
 export async function createProduct(payload: ProductPayload): Promise<Product> {
-  const { data } = await withRetry(() => api.post<Product>('/products', payload))
+  const { data } = await withRetry(() => api.post<Product>('/products', payload, { timeout: ICON_LOOKUP_TIMEOUT_MS }))
   return data
 }
 
@@ -148,6 +149,8 @@ export async function setProductIcon(id: number, icon: string): Promise<Product>
  * construction rather than by convention.
  */
 export async function reassignIcons(): Promise<IconReassignmentResult> {
-  const { data } = await withRetry(() => api.post<IconReassignmentResult>('/products/icons/reassign'))
+  const { data } = await withRetry(() =>
+    api.post<IconReassignmentResult>('/products/icons/reassign', undefined, { timeout: ICON_REASSIGN_TIMEOUT_MS }),
+  )
   return data
 }

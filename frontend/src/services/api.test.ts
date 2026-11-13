@@ -1,7 +1,8 @@
 import { AxiosError, AxiosHeaders } from 'axios'
 import { describe, expect, it } from 'vitest'
 
-import { apiUrl, isUnreachable, toErrorMessage } from '@/services/api'
+import { api, apiUrl, isUnreachable, toErrorMessage } from '@/services/api'
+import { DEFAULT_TIMEOUT_MS } from '@/services/timeouts'
 
 function axiosErrorWith(data: unknown, status = 422): AxiosError {
   const error = new AxiosError('Request failed')
@@ -76,5 +77,25 @@ describe('apiUrl', () => {
     // "/api" path — see api.ts — so this also covers the production shape
     // (proxied by nginx/Cloudflare) without needing to mock import.meta.env.
     expect(apiUrl('/products')).toBe(`${window.location.origin}/api/products`)
+  })
+})
+
+describe('request timeout — see #173', () => {
+  /** What axios raises when the answer never comes: no response, and its
+   *  own code for a request it gave up on. */
+  function timeoutError(): AxiosError {
+    return new AxiosError(`timeout of ${DEFAULT_TIMEOUT_MS}ms exceeded`, AxiosError.ECONNABORTED)
+  }
+
+  it('gives up on a request nobody answers, instead of waiting forever', () => {
+    // 0, axios's own default, means "no limit" — what left "Guardando…" up
+    // indefinitely on a weak signal.
+    expect(api.defaults.timeout).toBe(DEFAULT_TIMEOUT_MS)
+    expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(0)
+  })
+
+  it('reports a timeout the same way as a server that cannot be reached', () => {
+    expect(isUnreachable(timeoutError())).toBe(true)
+    expect(toErrorMessage(timeoutError())).toBe('No se pudo conectar con el servidor.')
   })
 })

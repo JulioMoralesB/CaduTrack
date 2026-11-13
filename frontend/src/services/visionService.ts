@@ -1,4 +1,5 @@
 import { api } from '@/services/api'
+import { LABEL_READ_TIMEOUT_MS } from '@/services/timeouts'
 import type { LabelExtraction } from '@/services/types'
 
 /**
@@ -27,6 +28,7 @@ export async function extractLabel(image: Blob): Promise<LabelExtraction> {
   form.append('image', image, 'label.jpg')
   const { data } = await api.post<LabelExtraction>('/vision/label', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: LABEL_READ_TIMEOUT_MS,
   })
   return data
 }
