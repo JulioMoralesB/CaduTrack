@@ -110,7 +110,10 @@ export function ProductForm({
   onCancel,
   title,
 }: ProductFormProps) {
-  const [form, setForm] = useState<FormState>(() => initialState(product, prefill, nameSuggestions))
+  // Kept to tell a form someone has worked on from one just opened — see
+  // `dirty` below.
+  const [initial] = useState<FormState>(() => initialState(product, prefill, nameSuggestions))
+  const [form, setForm] = useState<FormState>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -144,6 +147,13 @@ export function ProductForm({
 
   const isEdit = product !== undefined
   const scanBusy = scanning || barcodeScanning || barcodeLookupPending
+
+  // Whether a stray tap outside the form would throw something away — see
+  // #174: a field that no longer says what the form opened with, or a save
+  // or a photo read still on its way. A prefilled form nobody has touched
+  // loses nothing: what filled it is still where it came from.
+  const dirty = (Object.keys(form) as (keyof FormState)[]).some((field) => form[field] !== initial[field])
+  const somethingToLose = dirty || saving || scanBusy
   const labelInputRef = useRef<HTMLInputElement>(null)
   const barcodeInputRef = useRef<HTMLInputElement>(null)
 
@@ -383,7 +393,11 @@ export function ProductForm({
   }
 
   return (
-    <Modal title={title ?? (isEdit ? 'Editar producto' : 'Agregar producto')} onClose={onCancel}>
+    <Modal
+      title={title ?? (isEdit ? 'Editar producto' : 'Agregar producto')}
+      onClose={onCancel}
+      dismissOnBackdrop={!somethingToLose}
+    >
       <form className="form" onSubmit={handleSubmit}>
         {/* The photo is the entry point, not an afterthought — see #83 — so
             it comes first, above manual entry rather than buried below it.
