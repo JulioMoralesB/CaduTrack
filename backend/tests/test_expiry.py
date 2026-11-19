@@ -10,6 +10,7 @@ from app.expiry import (
     ExpiryStatus,
     days_until_expiry,
     expiry_status,
+    set_expiring_soon_days,
     shelf_life_days,
     today,
 )
@@ -39,6 +40,16 @@ def test_expiring_today_is_not_yet_expired():
 def test_the_boundary_is_inclusive():
     assert expiry_status(EXPIRING_SOON_DAYS) == ExpiryStatus.EXPIRING_SOON
     assert expiry_status(EXPIRING_SOON_DAYS + 1) == ExpiryStatus.FRESH
+
+
+def test_the_threshold_follows_the_alert_setting():
+    """See #182: "Días de anticipación" is the one setting, so the amber
+    status, Por caducar and the alert agree on what is about to expire."""
+    set_expiring_soon_days(3)
+
+    assert expiry_status(3) == ExpiryStatus.EXPIRING_SOON
+    assert expiry_status(4) == ExpiryStatus.FRESH
+    assert expiry_status(-1) == ExpiryStatus.EXPIRED
 
 
 def test_days_until_expiry_counts_from_the_reference_date():

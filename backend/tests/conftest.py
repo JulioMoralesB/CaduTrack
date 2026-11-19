@@ -5,6 +5,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+from app import expiry
 from app.main import app
 
 
@@ -72,3 +73,12 @@ def api_client(db_session) -> TestClient:
     app.dependency_overrides[get_db] = lambda: db_session
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_expiring_soon_days():
+    """The threshold follows the stored alert setting process-wide (see
+    app/expiry.py), so a test that saves one must not leave it for the next."""
+    yield
+    expiry.set_expiring_soon_days(expiry.EXPIRING_SOON_DAYS)
+

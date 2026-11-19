@@ -11,6 +11,8 @@ from datetime import time
 from sqlalchemy.orm import Session
 
 from app.config import settings as env_settings
+from app.db.session import SessionLocal
+from app.expiry import set_expiring_soon_days
 from app.models import AlertSettings
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ def get_or_create(session: Session) -> AlertSettings:
     """
     stored = session.get(AlertSettings, SINGLETON_ID)
     if stored is not None:
+        set_expiring_soon_days(stored.days_ahead)
         return stored
 
     # Validate before inserting: a malformed ALERT_TIME would otherwise surface
@@ -56,6 +59,7 @@ def get_or_create(session: Session) -> AlertSettings:
     session.add(stored)
     session.commit()
     session.refresh(stored)
+    set_expiring_soon_days(stored.days_ahead)
     logger.info(
         "Seeded alert settings from the environment: %s, %s days ahead",
         stored.alert_time,
@@ -72,6 +76,7 @@ def update(session: Session, *, enabled: bool, alert_time: str, days_ahead: int)
     stored.days_ahead = days_ahead
     session.commit()
     session.refresh(stored)
+    set_expiring_soon_days(stored.days_ahead)
     logger.info(
         "Alert settings updated: enabled=%s time=%s days_ahead=%s",
         stored.enabled,
@@ -89,3 +94,11 @@ def read_only(session: Session) -> tuple[bool, str, int]:
     """
     stored = get_or_create(session)
     return stored.enabled, stored.alert_time, stored.days_ahead
+
+
+def load_expiring_soon_days() -> None:
+    """Read the stored days-ahead once at startup, so product statuses follow
+    it from the first request — see app/expiry.py and #182."""
+    with SessionLocal() as session:
+        get_or_create(session)
+

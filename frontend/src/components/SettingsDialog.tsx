@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CategoryManager } from '@/components/CategoryManager'
 import { Modal } from '@/components/Modal'
@@ -19,6 +19,10 @@ interface SettingsDialogProps {
    *  behind the dialog picks up the new icons instead of showing stale ones
    *  until something else happens to trigger a reload. */
   onIconsReassigned: () => void
+  /** Called after each alert-settings save. Días de anticipación also
+   *  decides which products show as "por caducar" (see #182), so the list
+   *  behind the dialog reloads to show the new amber straight away. */
+  onAlertsSaved: () => void
   /** Called after any category change, with the id if one was deleted. */
   onCategoriesChanged: (deletedId?: number) => Promise<void>
 }
@@ -87,6 +91,7 @@ export function SettingsDialog({
   products,
   onClose,
   onIconsReassigned,
+  onAlertsSaved,
   onCategoriesChanged,
 }: SettingsDialogProps) {
   const [current, setCurrent] = useState<SettingsResponse | null>(null)
@@ -104,9 +109,17 @@ export function SettingsDialog({
   const [reassigning, setReassigning] = useState(false)
   const [reassignResult, setReassignResult] = useState<string | null>(null)
 
+  // A ref, so a new function from the parent on every render doesn't make
+  // a new persistAlerts and restart the autosave.
+  const onAlertsSavedRef = useRef(onAlertsSaved)
+  useEffect(() => {
+    onAlertsSavedRef.current = onAlertsSaved
+  }, [onAlertsSaved])
+
   const persistAlerts = useCallback(async (payload: AlertSettingsPayload) => {
     // The response carries the rescheduled next run, for the hint below.
     setCurrent(await saveSettings(payload))
+    onAlertsSavedRef.current()
   }, [])
   const persistIcons = useCallback((payload: IconSettingsPayload) => saveIconSettings(payload), [])
 
@@ -248,6 +261,10 @@ export function SettingsDialog({
               />
             </label>
           </div>
+
+          <p className="settings__hint">
+            Los días de anticipación también marcan como «por caducar» lo que vence en ese plazo.
+          </p>
 
           {alertProblem && (
             <p className="form__error" role="alert">
