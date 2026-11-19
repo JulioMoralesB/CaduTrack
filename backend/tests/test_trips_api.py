@@ -196,6 +196,8 @@ def test_updating_a_resolved_item_is_rejected(api_client, mocker):
     )
 
     assert response.status_code == 409
+    # Shown to the user as is — see #180.
+    assert response.json()["detail"] == "Ese artículo ya se había resuelto."
 
 
 def test_dropping_an_item_resolves_it_without_a_product(api_client, mocker):
@@ -317,6 +319,7 @@ def test_missing_item_is_404(api_client, mocker, method, path_suffix):
     response = getattr(api_client, method)(f"/trips/{trip['id']}{path_suffix}", **kwargs)
 
     assert response.status_code == 404
+    assert response.json()["detail"] == "Ese artículo ya no está en el recibo."
 
 
 @pytest.mark.integration

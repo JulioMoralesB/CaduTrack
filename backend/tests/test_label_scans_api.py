@@ -114,7 +114,10 @@ def test_only_a_failed_read_can_be_retried(api_client, mocker):
     mocker.patch("app.label_queue.extract_label", return_value=_extraction())
     scan_id = _queue(api_client).json()["id"]
 
-    assert api_client.post(f"/label-scans/{scan_id}/retry").status_code == 409
+    response = api_client.post(f"/label-scans/{scan_id}/retry")
+    assert response.status_code == 409
+    # Shown to the user as is — see #180.
+    assert response.json()["detail"] == "Solo se puede reintentar una foto que no se pudo leer."
 
 
 def test_a_photo_that_breaks_the_reader_is_failed_without_blocking_the_rest(api_client, mocker):
@@ -188,7 +191,9 @@ def test_a_resolved_scan_cannot_be_resolved_or_dropped_again(api_client, mocker)
     api_client.post(f"/label-scans/{scan_id}/resolve", json={"product_id": product_id})
 
     assert api_client.post(f"/label-scans/{scan_id}/resolve", json={"product_id": product_id}).status_code == 409
-    assert api_client.post(f"/label-scans/{scan_id}/drop").status_code == 409
+    response = api_client.post(f"/label-scans/{scan_id}/drop")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Esa foto ya se había resuelto."
 
 
 def test_a_photo_can_be_dropped_even_before_it_is_read(api_client, mocker):
@@ -231,6 +236,9 @@ def test_an_empty_photo_is_rejected(api_client):
 
 
 def test_unknown_scans_are_404(api_client):
-    assert api_client.post("/label-scans/9999/drop").status_code == 404
-    assert api_client.post("/label-scans/9999/retry").status_code == 404
-    assert api_client.get("/label-scans/9999/image").status_code == 404
+    for response in (api_client.post("/label-scans/9999/drop"), api_client.post("/label-scans/9999/retry")):
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Esa foto ya no está en la lista."
+    response = api_client.get("/label-scans/9999/image")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Esa foto ya no está guardada."

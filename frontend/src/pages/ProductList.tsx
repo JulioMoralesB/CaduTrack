@@ -499,6 +499,7 @@ export function ProductList() {
                   onProductChanged={replaceProduct}
                   onConsumed={handleConsumed}
                   onPartConsumed={handlePartConsumed}
+                  onAlreadyGone={removeProduct}
                 />
               ))}
             </ul>

@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { useState } from 'react'
 
 import { IconPicker } from '@/components/IconPicker'
@@ -20,6 +21,20 @@ interface ProductCardProps {
   /** Called with the server's response after one unit was eaten and the rest
    *  stays — the row is updated in place, and the list offers the undo. */
   onPartConsumed: (updated: Product) => void
+  /** Called with the id when the product turns out to have left the list
+   *  already — see #180. Off the list, with nothing to undo. */
+  onAlreadyGone: (id: number) => void
+}
+
+/**
+ * Whether a consume or spoil failed only because the product had already
+ * left the list — eaten, thrown out or deleted from another phone, or from
+ * a list shown from the offline cache. What the tap asked for has already
+ * happened, so it isn't an error worth showing — see #180.
+ */
+function alreadyOffTheList(caught: unknown): boolean {
+  const status = isAxiosError(caught) ? caught.response?.status : undefined
+  return status === 409 || status === 404
 }
 
 /**
@@ -41,6 +56,7 @@ export function ProductCard({
   onProductChanged,
   onConsumed,
   onPartConsumed,
+  onAlreadyGone,
 }: ProductCardProps) {
   const [expanded, setExpanded] = useState(false)
   const detailsId = `product-${product.id}-details`
@@ -109,7 +125,8 @@ export function ProductCard({
         await (spoiled ? spoilProduct : consumeProduct)(product.id)
         onConsumed(product.id, spoiled)
       } catch (caught) {
-        setConsumeError(toErrorMessage(caught))
+        if (alreadyOffTheList(caught)) onAlreadyGone(product.id)
+        else setConsumeError(toErrorMessage(caught))
       } finally {
         setLeaving(null)
       }
@@ -128,7 +145,8 @@ export function ProductCard({
         if (updated.consumed_at === null) onPartConsumed(updated)
         else onConsumed(product.id, false)
       } catch (caught) {
-        setConsumeError(toErrorMessage(caught))
+        if (alreadyOffTheList(caught)) onAlreadyGone(product.id)
+        else setConsumeError(toErrorMessage(caught))
       } finally {
         setLeaving(null)
       }
