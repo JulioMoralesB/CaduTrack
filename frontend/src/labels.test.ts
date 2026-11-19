@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { expiryPhrase, quantityLabel } from '@/labels'
+import { dayMonth, expiryPhrase, quantityLabel } from '@/labels'
 
 describe('expiryPhrase', () => {
   it('says today rather than "in 0 days"', () => {
@@ -59,3 +59,12 @@ describe('quantityLabel', () => {
     expect(quantityLabel('2.00', 'manojo')).toBe('2 manojo')
   })
 })
+
+describe('dayMonth', () => {
+  it('reads a date-only value as that calendar day, not UTC midnight — see #179', () => {
+    // new Date('2026-09-01') is UTC midnight: 31 Aug in Mexico City.
+    expect(dayMonth('2026-09-01')).toMatch(/^1 sep/)
+    expect(dayMonth('2026-12-31')).toMatch(/^31 dic/)
+  })
+})
+

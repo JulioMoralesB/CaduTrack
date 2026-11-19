@@ -62,3 +62,12 @@ export function quantityLabel(quantity: string, unit: string | null): string {
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
+
+/** "1 sep" for a date-only value such as an expiry date ("2026-09-01").
+ *  Built from its parts: new Date("2026-09-01") is UTC midnight, which is
+ *  still the day before in Mexico. */
+export function dayMonth(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+}
+
