@@ -1,7 +1,16 @@
 """Health endpoint tests."""
 
-from app import routers
+import pytest
+
+from app import activity, label_queue, routers
 from app.config import settings
+
+
+@pytest.fixture(autouse=True)
+def no_label_queue(monkeypatch):
+    """These run without a database; test_activity.py covers busy itself."""
+    monkeypatch.setattr(label_queue, "has_pending", lambda: False)
+    activity.reset()
 
 
 def test_health_reports_ok_when_database_answers(client, monkeypatch):
@@ -11,7 +20,14 @@ def test_health_reports_ok_when_database_answers(client, monkeypatch):
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "database": "ok", "version": "v0.11.0"}
+    assert response.json() == {
+        "status": "ok",
+        "database": "ok",
+        "version": "v0.11.0",
+        "last_user_activity_at": None,
+        "started_at": activity.started_at().isoformat(),
+        "busy": False,
+    }
 
 
 def test_health_reports_degraded_when_database_is_unreachable(client, monkeypatch):
@@ -22,7 +38,14 @@ def test_health_reports_degraded_when_database_is_unreachable(client, monkeypatc
     response = client.get("/health")
 
     assert response.status_code == 503
-    assert response.json() == {"status": "degraded", "database": "unavailable", "version": "v0.11.0"}
+    assert response.json() == {
+        "status": "degraded",
+        "database": "unavailable",
+        "version": "v0.11.0",
+        "last_user_activity_at": None,
+        "started_at": activity.started_at().isoformat(),
+        "busy": False,
+    }
 
 
 def test_health_reports_dev_outside_the_release_pipeline(client, monkeypatch):

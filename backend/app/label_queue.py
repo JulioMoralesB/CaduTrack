@@ -49,6 +49,11 @@ def process_pending() -> None:
         logger.exception("Label queue processing failed")
 
 
+def has_pending() -> bool:
+    """Whether any photo is still waiting to be read — or being read now."""
+    return _next_pending_id() is not None
+
+
 def _next_pending_id() -> int | None:
     with SessionLocal() as session:
         return session.execute(

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app import receipt_name_cache
+from app import activity, receipt_name_cache
 from app.db.session import get_db
 from app.models import Product, ShoppingTrip, ShoppingTripItem
 from app.receipt_client import expand_names, extract_receipt
@@ -101,33 +101,37 @@ def create_trip_from_receipt(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="La imagen es demasiado grande"
         )
 
-    extraction = extract_receipt(contents)
-    if extraction is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No se pudo leer el recibo. Agrega los productos manualmente.",
-        )
+    # Busy for an idle shutdown — see #215 — from the first model call to
+    # the last: the photo is never stored, so a read cut off halfway is
+    # simply lost.
+    with activity.reading_receipt():
+        extraction = extract_receipt(contents)
+        if extraction is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No se pudo leer el recibo. Agrega los productos manualmente.",
+            )
 
-    # A name for every line, cache first — see #126. Only a raw text
-    # receipt_name_cache has never seen before ever reaches expand_names,
-    # so a repeat purchase costs one model call (the OCR pass above), not
-    # two, and a name the user already corrected once is never re-guessed.
-    resolved_names: dict[str, str] = {}
-    unseen_raw_names: set[str] = set()
-    for item in extraction.items:
-        if item.raw_name in resolved_names or item.raw_name in unseen_raw_names:
-            continue
-        cached_name = receipt_name_cache.get(db, item.raw_name)
-        if cached_name is not None:
-            resolved_names[item.raw_name] = cached_name
-        else:
-            unseen_raw_names.add(item.raw_name)
+        # A name for every line, cache first — see #126. Only a raw text
+        # receipt_name_cache has never seen before ever reaches expand_names,
+        # so a repeat purchase costs one model call (the OCR pass above), not
+        # two, and a name the user already corrected once is never re-guessed.
+        resolved_names: dict[str, str] = {}
+        unseen_raw_names: set[str] = set()
+        for item in extraction.items:
+            if item.raw_name in resolved_names or item.raw_name in unseen_raw_names:
+                continue
+            cached_name = receipt_name_cache.get(db, item.raw_name)
+            if cached_name is not None:
+                resolved_names[item.raw_name] = cached_name
+            else:
+                unseen_raw_names.add(item.raw_name)
 
-    if unseen_raw_names:
-        # Ends the read transaction the lookups above opened, so a model call
-        # of up to 30 seconds doesn't hold a pooled connection doing nothing.
-        db.commit()
-        resolved_names.update(expand_names(list(unseen_raw_names)))
+        if unseen_raw_names:
+            # Ends the read transaction the lookups above opened, so a model call
+            # of up to 30 seconds doesn't hold a pooled connection doing nothing.
+            db.commit()
+            resolved_names.update(expand_names(list(unseen_raw_names)))
 
     trip = ShoppingTrip(stated_item_count=extraction.stated_item_count)
     for item in extraction.items:
