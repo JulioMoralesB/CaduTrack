@@ -484,12 +484,20 @@ describe('ProductForm duplicate check', () => {
   }
 
   it('shows the three-way choice instead of saving, when the name matches an active product created today', () => {
-    const existing = fakeProduct({ id: 9, name: 'Nopal limpio', quantity: '0.50', unit: 'kg', created_at: createdToday() })
+    const existing = fakeProduct({
+      id: 9,
+      name: 'Nopal limpio',
+      quantity: '0.50',
+      unit: 'kg',
+      expires_at: '2026-09-01',
+      created_at: createdToday(),
+    })
     render(<ProductForm categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={vi.fn()} />)
 
     fillAndSubmit()
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Ya agregaste "Nopal limpio" hoy (0.5 kg)')
+    // Its date too, so there is something to compare against — see #179.
+    expect(screen.getByRole('alert')).toHaveTextContent(/Ya agregaste "Nopal limpio" hoy \(0\.5 kg, caduca el 1 sep/)
     expect(screen.getByRole('button', { name: 'Agregar de todas formas' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sumar a la cantidad existente' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Omitir' })).toBeInTheDocument()
@@ -534,8 +542,24 @@ describe('ProductForm duplicate check', () => {
     expect(mockedCreate).toHaveBeenCalledOnce()
   })
 
+  it('does not offer to merge into a product that expires on a different day — see #179', () => {
+    // Two cartons of milk from different batches: summing them would give
+    // the new one the old one's date without saying so.
+    const existing = fakeProduct({ id: 9, name: 'Nopal limpio', expires_at: '2026-09-10', created_at: createdToday() })
+    render(<ProductForm categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={vi.fn()} />)
+
+    fillAndSubmit()
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/caduca el 10 sep/)
+    expect(alert).toHaveTextContent(/otra fecha/)
+    expect(screen.queryByRole('button', { name: 'Sumar a la cantidad existente' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Agregar de todas formas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Omitir' })).toBeInTheDocument()
+  })
+
   it('"Sumar a la cantidad existente" adjusts the existing product instead of creating a new one', async () => {
-    const existing = fakeProduct({ id: 9, name: 'Nopal limpio', created_at: createdToday() })
+    const existing = fakeProduct({ id: 9, name: 'Nopal limpio', expires_at: '2026-09-01', created_at: createdToday() })
     const updated = fakeProduct({ id: 9, name: 'Nopal limpio', quantity: '1.50' })
     mockedAdjustQuantity.mockResolvedValue(updated)
     const onSaved = vi.fn()

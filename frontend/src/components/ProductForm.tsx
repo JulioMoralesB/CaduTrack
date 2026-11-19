@@ -3,7 +3,7 @@ import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'rea
 import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
 import { findDuplicateToday } from '@/duplicateCheck'
-import { LOCATION_LABELS, quantityLabel } from '@/labels'
+import { LOCATION_LABELS, dayMonth, quantityLabel } from '@/labels'
 import { findNameSuggestion, matchNameSuggestions } from '@/nameSuggestions'
 import { canStepDown, stepQuantity } from '@/quantity'
 import { QUICK_DATES, lastShelfLife, quickDateValue } from '@/quickDates'
@@ -392,6 +392,9 @@ export function ProductForm({
     })()
   }
 
+  const canMerge =
+    duplicateWarning !== null && (form.expires_at === '' || form.expires_at === duplicateWarning.expires_at)
+
   return (
     <Modal
       title={title ?? (isEdit ? 'Editar producto' : 'Agregar producto')}
@@ -670,16 +673,25 @@ export function ProductForm({
           {duplicateWarning ? (
             <div className="form__duplicate-warning" role="alert">
               <p>
-                Ya agregaste "{duplicateWarning.name}" hoy ({quantityLabel(duplicateWarning.quantity, duplicateWarning.unit)}
-                ). ¿Qué quieres hacer?
+                Ya agregaste "{duplicateWarning.name}" hoy (
+                {quantityLabel(duplicateWarning.quantity, duplicateWarning.unit)}, caduca el{' '}
+                {dayMonth(duplicateWarning.expires_at)}).{' '}
+                {canMerge
+                  ? '¿Qué quieres hacer?'
+                  : 'Este caduca en otra fecha, así que se agregaría por separado.'}
               </p>
               <div className="form__actions">
                 <button type="button" onClick={onCancel} disabled={saving}>
                   Omitir
                 </button>
-                <button type="button" onClick={handleMergeIntoExisting} disabled={saving}>
-                  Sumar a la cantidad existente
-                </button>
+                {/* Only for the same date — see #179. Summing only adds the
+                    quantity, so a carton from another batch would silently
+                    take the existing row's date. */}
+                {canMerge && (
+                  <button type="button" onClick={handleMergeIntoExisting} disabled={saving}>
+                    Sumar a la cantidad existente
+                  </button>
+                )}
                 <button type="button" className="button--primary" onClick={handleAddAnyway} disabled={saving}>
                   Agregar de todas formas
                 </button>
