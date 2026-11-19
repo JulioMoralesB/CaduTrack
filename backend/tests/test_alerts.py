@@ -5,7 +5,14 @@ from unittest.mock import patch
 
 import pytest
 
-from app.alerts import format_alert, group_by_location, products_needing_attention, send_expiry_alert
+from app.alerts import (
+    TELEGRAM_MESSAGE_LIMIT,
+    alert_messages,
+    format_alert,
+    group_by_location,
+    products_needing_attention,
+    send_expiry_alert,
+)
 from app.models import Product
 from app.telegram import TelegramDeliveryError, TelegramNotConfigured, escape
 
@@ -82,6 +89,67 @@ def test_the_count_is_written_as_spanish_not_as_a_template():
     assert "2 productos por revisar" in many
 
 
+def _telegram_length(text: str) -> int:
+    """Length as Telegram counts it: UTF-16 code units, so an emoji is two."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _many_products(count: int) -> list[Product]:
+    locations = ("fridge", "freezer", "pantry")
+    products = [
+        _product(f"Producto con un nombre bastante largo número {i:03d}", i % 7 - 2, locations[i % 3])
+        for i in range(count)
+    ]
+    # Distinct ids: _product's hash-based one can collide over this many.
+    for i, product in enumerate(products):
+        product.id = 1000 + i
+    return products
+
+
+def test_a_short_alert_is_one_message_exactly_as_formatted():
+    products = [_product("Leche", 1), _product("Pan", 2, "pantry")]
+
+    assert alert_messages(products, reference=REFERENCE) == [format_alert(products, reference=REFERENCE)]
+
+
+def test_a_long_alert_is_split_under_telegrams_limit():
+    """See #181: Telegram rejects a message over 4096 characters, and then
+    nothing at all arrives — on exactly the day there is most to report."""
+    products = _many_products(240)
+    assert _telegram_length(format_alert(products, reference=REFERENCE)) > 4096
+
+    messages = alert_messages(products, reference=REFERENCE)
+
+    assert len(messages) > 1
+    assert all(_telegram_length(message) <= TELEGRAM_MESSAGE_LIMIT for message in messages)
+    assert TELEGRAM_MESSAGE_LIMIT <= 4096
+
+
+def test_a_split_alert_keeps_every_product_once_and_in_order():
+    products = _many_products(240)
+
+    messages = alert_messages(products, reference=REFERENCE)
+
+    joined = "\n".join(messages)
+    names = [line for line in joined.splitlines() if "Producto con un nombre" in line]
+    assert len(names) == len(products)
+    # Same order as the single message would have had.
+    single = [line for line in format_alert(products, reference=REFERENCE).splitlines() if "Producto con un nombre" in line]
+    assert names == single
+
+
+def test_each_part_says_which_part_it_is_and_where_its_lines_are():
+    messages = alert_messages(_many_products(240), reference=REFERENCE)
+    total = len(messages)
+
+    assert messages[0].startswith(f"<b>CaduTrack</b> — 240 productos por revisar (1/{total})")
+    for number, message in enumerate(messages[1:], start=2):
+        first_line, second_line = message.splitlines()[:2]
+        assert first_line == f"<b>CaduTrack</b> — continúa ({number}/{total})"
+        # A part never starts with a product line cut off from its location.
+        assert second_line == "" and message.splitlines()[2].startswith("<b>")
+
+
 def test_escape_leaves_ordinary_text_alone():
     assert escape("Leche entera") == "Leche entera"
 
@@ -137,6 +205,19 @@ def test_sends_when_there_is_something_to_report(db_session):
 
     send.assert_called_once()
     assert "Leche" in send.call_args[0][0]
+
+
+@pytest.mark.integration
+def test_a_long_alert_is_sent_as_several_messages_in_order(db_session):
+    db_session.add_all(_many_products(240))
+    db_session.commit()
+
+    with patch("app.alerts.send_message") as send:
+        assert send_expiry_alert(db_session, reference=REFERENCE) == 240
+
+    sent = [call.args[0] for call in send.call_args_list]
+    assert len(sent) > 1
+    assert sent[0].startswith("<b>CaduTrack</b> — 240 productos por revisar (1/")
 
 
 @pytest.mark.integration
