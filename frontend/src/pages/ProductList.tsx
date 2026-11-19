@@ -37,14 +37,14 @@ import type { LabelScan, Product, ShoppingTrip } from '@/services/types'
  *  couple of seconds, a cold model load tens of them. */
 const LABEL_POLL_MS = 3000
 
-/** "2 leyendo, 3 por revisar" — only the parts that apply. */
+/** "3 etiquetas por revisar", "2 etiquetas por revisar · 1 leyendo",
+ *  "Leyendo 2 etiquetas" — count first, one short line. See #188. */
 function labelBannerText(scans: LabelScan[]): string {
   const reading = scans.filter((scan) => scan.status === 'pending').length
   const ready = scans.length - reading
-  const parts = []
-  if (reading > 0) parts.push(`${reading} leyendo`)
-  if (ready > 0) parts.push(`${ready} por revisar`)
-  return `Etiquetas: ${parts.join(', ')} — ${ready > 0 ? 'revisar' : 'ver'}`
+  if (ready === 0) return `Leyendo ${reading} ${reading === 1 ? 'etiqueta' : 'etiquetas'}`
+  const text = `${ready} ${ready === 1 ? 'etiqueta' : 'etiquetas'} por revisar`
+  return reading > 0 ? `${text} · ${reading} leyendo` : text
 }
 
 /** What the screen is currently doing, beyond showing the list. */
@@ -405,18 +405,38 @@ export function ProductList() {
         </p>
       )}
 
-      {dialog.kind !== 'labels' && labelScans.length > 0 && (
-        <button type="button" className="trip-banner" onClick={() => setDialog({ kind: 'labels' })}>
-          {labelBannerText(labelScans)}
-        </button>
-      )}
-
-      {dialog.kind !== 'trip' && currentTrip && pendingTripCount > 0 && (
-        <button type="button" className="trip-banner" onClick={() => setDialog({ kind: 'trip', trip: currentTrip })}>
-          {/* The date tells apart two scans of the same ticket — see #153. */}
-          Recibo pendiente ({shortDate(currentTrip.created_at)}): {pendingTripCount} producto
-          {pendingTripCount === 1 ? '' : 's'} por revisar — continuar
-        </button>
+      {/* One line each, count first, a chevron instead of a trailing verb,
+          side by side when both fit — see #188. They used to wrap to two
+          lines each and push the first product halfway down the screen. */}
+      {((dialog.kind !== 'labels' && labelScans.length > 0) ||
+        (dialog.kind !== 'trip' && currentTrip && pendingTripCount > 0)) && (
+        <div className="pending-banners">
+          {dialog.kind !== 'labels' && labelScans.length > 0 && (
+            <button type="button" className="trip-banner" onClick={() => setDialog({ kind: 'labels' })}>
+              <span aria-hidden="true">🏷️</span>
+              <span className="trip-banner__text">{labelBannerText(labelScans)}</span>
+              <span className="trip-banner__chevron" aria-hidden="true">
+                ›
+              </span>
+            </button>
+          )}
+          {dialog.kind !== 'trip' && currentTrip && pendingTripCount > 0 && (
+            <button
+              type="button"
+              className="trip-banner"
+              onClick={() => setDialog({ kind: 'trip', trip: currentTrip })}
+            >
+              <span aria-hidden="true">🧾</span>
+              {/* The date tells apart two scans of the same ticket — see #153. */}
+              <span className="trip-banner__text">
+                Recibo del {shortDate(currentTrip.created_at)} · {pendingTripCount} por revisar
+              </span>
+              <span className="trip-banner__chevron" aria-hidden="true">
+                ›
+              </span>
+            </button>
+          )}
+        </div>
       )}
 
       {cachedAt && (
