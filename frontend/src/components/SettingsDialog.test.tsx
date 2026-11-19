@@ -43,15 +43,19 @@ function reassignment(overrides: Partial<IconReassignmentResult> = {}): IconReas
   return { considered: 3, updated: 2, still_default: 1, ...overrides }
 }
 
-function renderDialog(overrides: { onClose?: () => void; onIconsReassigned?: () => void } = {}) {
+function renderDialog(
+  overrides: { onClose?: () => void; onIconsReassigned?: () => void; onAlertsSaved?: () => void } = {},
+) {
   const onClose = overrides.onClose ?? vi.fn()
   const onIconsReassigned = overrides.onIconsReassigned ?? vi.fn()
+  const onAlertsSaved = overrides.onAlertsSaved ?? vi.fn()
   render(
     <SettingsDialog
       categories={[]}
       products={[]}
       onClose={onClose}
       onIconsReassigned={onIconsReassigned}
+      onAlertsSaved={onAlertsSaved}
       onCategoriesChanged={vi.fn()}
     />,
   )
@@ -101,6 +105,25 @@ describe('SettingsDialog', () => {
 
     await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
     expect(mockedSave).toHaveBeenCalledWith({ enabled: true, alert_time: '19:45', days_ahead: 14 })
+  })
+
+  it('says the days ahead also decide what is shown as por caducar — see #182', async () => {
+    mockedGet.mockResolvedValue(response())
+
+    renderDialog()
+
+    expect(await screen.findByText(/también marcan como «por caducar»/i)).toBeInTheDocument()
+  })
+
+  it('lets the list catch up once the alert settings are saved — see #182', async () => {
+    mockedGet.mockResolvedValue(response())
+    const onAlertsSaved = vi.fn()
+
+    renderDialog({ onAlertsSaved })
+    fireEvent.change(await screen.findByLabelText('Días de anticipación'), { target: { value: '3' } })
+
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onAlertsSaved).toHaveBeenCalledOnce())
   })
 
   it('saves the icon toggle through its own endpoint, leaving the alerts alone', async () => {
@@ -243,7 +266,7 @@ describe('SettingsDialog', () => {
   it('never renders anything that looks like a token', async () => {
     mockedGet.mockResolvedValue(response())
 
-    const { container } = render(<SettingsDialog categories={[]} products={[]} onClose={vi.fn()} onIconsReassigned={vi.fn()} onCategoriesChanged={vi.fn()} />)
+    const { container } = render(<SettingsDialog categories={[]} products={[]} onClose={vi.fn()} onIconsReassigned={vi.fn()} onAlertsSaved={vi.fn()} onCategoriesChanged={vi.fn()} />)
     await screen.findByLabelText('Hora')
 
     // The API does not send it; the UI must not invent a field for it either.

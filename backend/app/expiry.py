@@ -10,8 +10,26 @@ from zoneinfo import ZoneInfo
 
 from app.config import settings
 
-# A product is "expiring soon" from this many days out, inclusive.
+# A product is "expiring soon" from this many days out, inclusive — until
+# the stored alert settings say otherwise. See #182: "Días de anticipación"
+# in Ajustes is the one setting, so the amber status, the "Por caducar"
+# chip, /summary and the daily alert always agree on what is about to
+# expire. 7 is only the value before those settings are first read.
 EXPIRING_SOON_DAYS = 7
+
+_expiring_soon_days = EXPIRING_SOON_DAYS
+
+
+def set_expiring_soon_days(days: int) -> None:
+    """Follow the alert's days-ahead setting — app.settings_store calls this
+    whenever it reads or saves one.
+
+    Held process-wide rather than looked up per product: a status is computed
+    for every row of every product response, and the setting is a singleton
+    that only ever changes through settings_store in this same process.
+    """
+    global _expiring_soon_days
+    _expiring_soon_days = days
 
 
 class ExpiryStatus(StrEnum):
@@ -58,6 +76,6 @@ def expiry_status(days: int) -> ExpiryStatus:
     """
     if days < 0:
         return ExpiryStatus.EXPIRED
-    if days <= EXPIRING_SOON_DAYS:
+    if days <= _expiring_soon_days:
         return ExpiryStatus.EXPIRING_SOON
     return ExpiryStatus.FRESH

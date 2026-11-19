@@ -24,6 +24,7 @@ from app.routers import (
 )
 from app.routers import settings as settings_router
 from app.scheduler import shutdown_scheduler, start_scheduler
+from app.settings_store import load_expiring_soon_days
 
 # Configure structured logging before anything else emits a record.
 setup_logging(
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Run the daily alert job for as long as the API is up, and finish
     reading any label photos a previous run left queued."""
+    load_expiring_soon_days()
     start_scheduler()
     threading.Thread(target=process_pending, name="label-queue-resume", daemon=True).start()
     try:

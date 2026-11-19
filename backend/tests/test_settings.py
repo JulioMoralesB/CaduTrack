@@ -77,6 +77,24 @@ def test_saving_persists_the_new_values(api_client):
 
 
 @pytest.mark.integration
+def test_products_are_marked_expiring_soon_by_the_alert_days_ahead(api_client):
+    """See #182: the app's "Por caducar" and the alert used to disagree
+    whenever Días de anticipación wasn't 7."""
+    from datetime import date, timedelta
+
+    in_five_days = str(date.today() + timedelta(days=5))
+    api_client.post(
+        "/products", json={"name": "Queso", "expires_at": in_five_days, "location": "fridge"}
+    )
+
+    api_client.put("/settings", json={"enabled": True, "alert_time": "08:00", "days_ahead": 3})
+    assert api_client.get("/products").json()[0]["status"] == "fresh"
+
+    api_client.put("/settings", json={"enabled": True, "alert_time": "08:00", "days_ahead": 10})
+    assert api_client.get("/products").json()[0]["status"] == "expiring_soon"
+
+
+@pytest.mark.integration
 def test_saving_a_new_time_actually_reschedules_the_job(api_client, db_session, telegram_configured):
     """The failure this guards against looks like success.
 

@@ -533,6 +533,7 @@ export function ProductList() {
           products={products}
           onClose={close}
           onIconsReassigned={reload}
+          onAlertsSaved={reload}
           onCategoriesChanged={handleCategoriesChanged}
         />
       )}

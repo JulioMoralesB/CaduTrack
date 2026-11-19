@@ -70,6 +70,16 @@ def test_counts_expired_and_expiring_soon_separately(api_client, summary_key):
     assert body["expiring_soon"] == 1
 
 
+def test_counts_expiring_soon_by_the_alert_days_ahead(api_client, summary_key):
+    """See #182: the dashboard agrees with the app and the alert."""
+    api_client.post("/products", json=_product(name="En cinco días", expires_at=str(date.today() + timedelta(days=5))))
+    api_client.put("/settings", json={"enabled": True, "alert_time": "08:00", "days_ahead": 3})
+
+    body = api_client.get("/summary", headers={"X-API-Key": summary_key}).json()
+
+    assert body["expiring_soon"] == 0
+
+
 def test_expired_products_lists_every_one_of_them(api_client, summary_key):
     today = date.today()
     api_client.post("/products", json=_product(name="Leche", expires_at=str(today - timedelta(days=1))))
