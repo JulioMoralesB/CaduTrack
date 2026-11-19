@@ -3,7 +3,9 @@
 .app {
   max-width: 40rem;
   margin: 0 auto;
-  padding: 1rem 1rem 3rem;
+  /* Room at the bottom for the floating Agregar, so the last card's
+     buttons can be scrolled clear of it — see #176. */
+  padding: 1rem 1rem 6rem;
 }
 
 .app__header {
@@ -329,17 +331,13 @@
 /* From tablet up there is room to put the expiry beside the details. */
 @media (min-width: 30rem) {
   .app {
-    padding: 2rem 1.5rem 4rem;
+    padding: 2rem 1.5rem 6rem;
   }
 }
 
-/* One "+ Agregar" entry point — see #147. It replaced three equal buttons
-   that crowded the row and wrapped "Agregar producto" onto two lines. */
-.list-header {
-  display: flex;
-  gap: 0.5rem;
-  padding-bottom: 0.75rem;
-}
+/* One "+" entry point — see #147, which replaced three equal buttons, and
+   #176, which took it off the top of the list: it scrolled away with the
+   header, to the hardest place on a phone to reach with a thumb. */
 
 .list-header__status {
   margin: -0.25rem 0 0.75rem;
@@ -349,23 +347,41 @@
 
 .add-menu {
   position: relative;
-  flex: 1;
+}
+
+/* Bottom right of the content column, not of a wide window, and clear of
+   the home indicator. Under the modal's z-index so it can never cover an
+   open form, and under the toast's. */
+.add-menu--floating {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right), calc((100vw - 40rem) / 2 + 1rem));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 4;
+  transition: bottom 150ms ease;
+}
+
+/* Above the undo toast while it shows — its Deshacer must stay tappable. */
+.add-menu--raised {
+  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.75rem);
 }
 
 .add-menu__toggle {
-  width: 100%;
-  min-height: 2.75rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.75rem;
   font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
 }
 
-/* Floats over the list instead of pushing it down, and sits under the
-   modal's z-index so it can never cover an open form. */
+/* Opens upwards from the button, over the list. */
 .add-menu__options {
   position: absolute;
-  top: calc(100% + 0.375rem);
   right: 0;
-  left: 0;
-  z-index: 4;
+  bottom: calc(100% + 0.5rem);
+  width: min(20rem, calc(100vw - 2rem));
   display: flex;
   flex-direction: column;
   padding: 0.375rem;

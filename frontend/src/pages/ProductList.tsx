@@ -351,13 +351,14 @@ export function ProductList() {
         </div>
       </header>
 
-      <div className="list-header">
+      <div>
         <AddMenu
           onManual={() => setDialog({ kind: 'create' })}
           onLabels={() => labelInputRef.current?.click()}
           onReceipt={() => receiptInputRef.current?.click()}
           labelsBusy={uploadingLabels !== null}
           receiptBusy={scanningReceipt}
+          raised={lastConsumed !== null}
         />
         {/* Hidden inputs driven by AddMenu's options — a real click on a
             hidden input rather than a wrapping <label>, same as ProductForm's
