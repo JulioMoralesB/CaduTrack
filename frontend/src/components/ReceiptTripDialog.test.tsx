@@ -403,9 +403,34 @@ describe('ReceiptTripDialog adding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    // Says what it does inside a walk — see #184.
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
 
     expect(await screen.findByLabelText('Nombre')).toHaveValue('Plátano')
+    expect(mockedResolve).not.toHaveBeenCalled()
+  })
+
+  it('leaves the walk with × and goes back to the checklist, everything still pending — see #184', async () => {
+    renderDialog({
+      items: [
+        tripItem({ id: 1, name: 'Nopal limpio', is_food: true }),
+        tripItem({ id: 2, name: 'Plátano', is_food: true }),
+        tripItem({ id: 3, name: 'Jitomate', is_food: true }),
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    await screen.findByText('Agregar producto (quedan 3)')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
+    await screen.findByText('Agregar producto (quedan 2)')
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    // The checklist again, not the next product and not the done screen.
+    expect(await screen.findByRole('button', { name: 'Continuar' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Nombre')).not.toBeInTheDocument()
+    expect(screen.getByText('Nopal limpio')).toBeInTheDocument()
+    expect(screen.getByText('Plátano')).toBeInTheDocument()
+    expect(screen.getByText('Jitomate')).toBeInTheDocument()
     expect(mockedResolve).not.toHaveBeenCalled()
   })
 
@@ -414,7 +439,7 @@ describe('ReceiptTripDialog adding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
 
     expect(
       await screen.findByText(

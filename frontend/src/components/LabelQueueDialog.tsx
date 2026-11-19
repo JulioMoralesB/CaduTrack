@@ -112,7 +112,10 @@ export function LabelQueueDialog({
         prefill={prefillFor(current)}
         title={liveQueue.length === 1 ? 'Agregar producto' : `Agregar producto (quedan ${liveQueue.length})`}
         onSaved={handleSaved}
+        // Same as a receipt walk — see #184.
+        cancelLabel="Omitir"
         onCancel={() => skip(current.id)}
+        onLeave={() => setQueue(null)}
       />
     )
   }

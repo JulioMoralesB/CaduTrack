@@ -231,7 +231,11 @@ export function ReceiptTripDialog({
         prefill={{ name: current.name, quantity: current.quantity }}
         title={remaining === 1 ? 'Agregar producto' : `Agregar producto (quedan ${remaining})`}
         onSaved={handleItemSaved}
+        // Inside the walk: the button skips this one, × leaves the walk for
+        // the checklist, where whatever wasn't added is still pending — #184.
+        cancelLabel="Omitir"
         onCancel={advanceQueue}
+        onLeave={() => setQueue(null)}
       />
     )
   }
