@@ -677,8 +677,9 @@ describe('scanning a receipt', () => {
 
     render(<ProductList />)
 
-    const banner = await screen.findByRole('button', { name: /recibo pendiente/i })
-    expect(banner).toHaveTextContent('2 productos')
+    const banner = await screen.findByRole('button', { name: /^Recibo del /i })
+    // One short line, count first — see #188.
+    expect(banner).toHaveAccessibleName(/^Recibo del \d+ \w+\.? · 2 por revisar$/)
 
     fireEvent.click(banner)
 
@@ -712,7 +713,7 @@ describe('scanning a receipt', () => {
     })
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: /recibo pendiente \(24 sep\)/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Recibo del 24 sep/i }))
     // Once this receipt is done, "current" is the older duplicate scan.
     mockedCurrentTrip.mockResolvedValue(olderTrip)
 
@@ -724,7 +725,7 @@ describe('scanning a receipt', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Entendido' }))
 
-    expect(await screen.findByRole('button', { name: /recibo pendiente \(21 sep\)/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^Recibo del 21 sep/i })).toBeInTheDocument()
   })
 
   it('does not show a banner once every item in the leftover trip is already resolved', async () => {
@@ -750,7 +751,7 @@ describe('scanning a receipt', () => {
     render(<ProductList />)
     await screen.findByRole('button', { name: 'Agregar' })
 
-    expect(screen.queryByRole('button', { name: /recibo pendiente/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Recibo del /i })).not.toBeInTheDocument()
   })
 })
 
@@ -1004,7 +1005,7 @@ describe('queuing label photos', () => {
     render(<ProductList />)
 
     expect(
-      await screen.findByRole('button', { name: 'Etiquetas: 1 leyendo, 2 por revisar — revisar' }),
+      await screen.findByRole('button', { name: '2 etiquetas por revisar · 1 leyendo' }),
     ).toBeInTheDocument()
   })
 
@@ -1013,7 +1014,7 @@ describe('queuing label photos', () => {
     mockedCurrentLabelScans.mockResolvedValue([labelScan()])
 
     render(<ProductList />)
-    fireEvent.click(await screen.findByRole('button', { name: /^Etiquetas: 1 por revisar/ }))
+    fireEvent.click(await screen.findByRole('button', { name: '1 etiqueta por revisar' }))
 
     expect(screen.getByRole('heading', { name: 'Etiquetas' })).toBeInTheDocument()
     expect(screen.getByText('Yogur natural')).toBeInTheDocument()
@@ -1055,11 +1056,11 @@ describe('queuing label photos', () => {
         .mockResolvedValue([labelScan()])
 
       render(<ProductList />)
-      await screen.findByRole('button', { name: /^Etiquetas: 1 leyendo/ })
+      await screen.findByRole('button', { name: 'Leyendo 1 etiqueta' })
 
       await vi.advanceTimersByTimeAsync(3000)
 
-      expect(await screen.findByRole('button', { name: /^Etiquetas: 1 por revisar/ })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: '1 etiqueta por revisar' })).toBeInTheDocument()
       const calls = mockedCurrentLabelScans.mock.calls.length
       await vi.advanceTimersByTimeAsync(9000)
       expect(mockedCurrentLabelScans).toHaveBeenCalledTimes(calls)
