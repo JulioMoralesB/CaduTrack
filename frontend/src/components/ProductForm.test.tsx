@@ -794,3 +794,68 @@ describe('ProductForm name suggestions', () => {
     expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
   })
 })
+
+describe('ProductForm and a stray tap outside it — see #174', () => {
+  function backdrop(): HTMLElement {
+    return screen.getByRole('dialog').parentElement as HTMLElement
+  }
+
+  it('closes on a tap outside while nothing has been filled in', () => {
+    const onCancel = vi.fn()
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={onCancel} />)
+
+    fireEvent.click(backdrop())
+
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
+
+  it('stays open once there is something in it to lose', () => {
+    const onCancel = vi.fn()
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={onCancel} />)
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nopal limpio' } })
+
+    fireEvent.click(backdrop())
+    expect(onCancel).not.toHaveBeenCalled()
+
+    // Cancelar is still the way to throw it away on purpose.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
+
+  it('closes again when the change is undone', () => {
+    const onCancel = vi.fn()
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={onCancel} />)
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nopal' } })
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: '' } })
+
+    fireEvent.click(backdrop())
+
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
+
+  it('treats an edit the same way: untouched closes, changed stays', () => {
+    const onCancel = vi.fn()
+    const existing = fakeProduct({ name: 'Yogur', expires_at: '2026-09-03' })
+    render(<ProductForm product={existing} categories={[]} products={[existing]} onSaved={vi.fn()} onCancel={onCancel} />)
+
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
+    fireEvent.click(backdrop())
+    expect(onCancel).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-03' } })
+    fireEvent.click(backdrop())
+    expect(onCancel).toHaveBeenCalledOnce()
+  })
+
+  it('stays open while a label is being read, before anything has reached the form', async () => {
+    mockedExtract.mockReturnValue(new Promise(() => {}))
+    const onCancel = vi.fn()
+    render(<ProductForm categories={[]} products={[]} onSaved={vi.fn()} onCancel={onCancel} />)
+    selectPhoto()
+    await waitFor(() => expect(mockedExtract).toHaveBeenCalled())
+
+    fireEvent.click(backdrop())
+
+    expect(onCancel).not.toHaveBeenCalled()
+  })
+})
