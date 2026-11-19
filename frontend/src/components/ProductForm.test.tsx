@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductForm } from '@/components/ProductForm'
@@ -671,7 +671,7 @@ describe('ProductForm name suggestions', () => {
 
     expect(screen.getByLabelText('Nombre')).toHaveValue('Leche entera')
     expect(screen.getByLabelText('Categoría')).toHaveValue('3')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Alacena')
     expect(screen.queryByRole('group', { name: 'Nombres usados antes' })).not.toBeInTheDocument()
   })
 
@@ -714,7 +714,7 @@ describe('ProductForm name suggestions', () => {
     fireEvent.blur(screen.getByLabelText('Nombre'))
 
     expect(screen.getByLabelText('Categoría')).toHaveValue('3')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Alacena')
   })
 
   it('leaves category and location alone when nothing matches', () => {
@@ -732,7 +732,7 @@ describe('ProductForm name suggestions', () => {
     fireEvent.blur(screen.getByLabelText('Nombre'))
 
     expect(screen.getByLabelText('Categoría')).toHaveValue('')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('fridge')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Refrigerador')
   })
 
   it('offers no suggestions and never autofills while editing', () => {
@@ -752,7 +752,7 @@ describe('ProductForm name suggestions', () => {
     expect(screen.queryByRole('group', { name: 'Nombres usados antes' })).not.toBeInTheDocument()
     fireEvent.blur(screen.getByLabelText('Nombre'))
     expect(screen.getByLabelText('Categoría')).toHaveValue('')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('fridge')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Refrigerador')
   })
 
   it('applies a matching suggestion once a label scan resolves the name', async () => {
@@ -771,7 +771,7 @@ describe('ProductForm name suggestions', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Leche entera'))
     expect(screen.getByLabelText('Categoría')).toHaveValue('3')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Alacena')
   })
 
   it('applies a matching suggestion once a barcode lookup resolves the name', async () => {
@@ -791,7 +791,7 @@ describe('ProductForm name suggestions', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Leche entera'))
     expect(screen.getByLabelText('Categoría')).toHaveValue('3')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Alacena')
   })
 })
 

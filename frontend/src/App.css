@@ -1328,6 +1328,20 @@
   display: none;
 }
 
+/* A short, fixed set that always fits: an even row instead of a scroller —
+   Dónde está, see #178. */
+.form__chip-row--even {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.form__chip-row--even .chip {
+  flex: 1 1 0;
+  justify-content: center;
+  min-height: 2.75rem;
+}
+
 /* A long product name is cut, not allowed to fill the whole row. */
 .form__chip-row > .chip {
   display: block;

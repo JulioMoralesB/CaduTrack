@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LabelQueueDialog } from '@/components/LabelQueueDialog'
@@ -181,7 +181,7 @@ describe('LabelQueueDialog adding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Agregar YOGUR NATURAL' }))
 
     expect(screen.getByLabelText('Categoría')).toHaveValue('3')
-    expect(screen.getByLabelText('Dónde está')).toHaveValue('pantry')
+    expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Alacena')
   })
 
   it('links the saved product to the photo and returns to the list', async () => {
