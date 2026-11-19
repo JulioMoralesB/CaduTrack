@@ -1,5 +1,7 @@
 import { registerSW } from 'virtual:pwa-register'
 
+import { reloadWhenSafe } from '@/updateGate'
+
 /**
  * Registers the service worker and keeps it actually checking for updates.
  *
@@ -13,11 +15,10 @@ import { registerSW } from 'virtual:pwa-register'
  * had the app open days earlier, and clearing site data was the only way
  * found to pick it up short of this.
  *
- * registerType: 'autoUpdate' (see vite.config.ts) already means an update,
- * once *found*, activates and reloads the page with no prompt — that part
- * needs nothing further, see registerSW's own default `onNeedReload`
- * behaviour. Finding it in the first place is the only piece that was
- * missing, so that's the only piece this adds.
+ * registerType: 'autoUpdate' (see vite.config.ts) means an update, once
+ * *found*, activates with no prompt. The reload that follows is left to
+ * updateGate (#175): it waits until no form is open and no photo is being
+ * sent, since coming back from the camera is exactly when this check runs.
  */
 export function registerServiceWorker(): void {
   registerSW({
@@ -28,6 +29,10 @@ export function registerServiceWorker(): void {
     // surfaced to the user: the app already works without a service worker,
     // just without offline support or background updates, so this is worth
     // knowing about from the console, not worth interrupting anyone over.
+    // Instead of registerSW's own immediate window.location.reload().
+    onNeedReload() {
+      reloadWhenSafe()
+    },
     onRegisterError(error) {
       console.error('Service worker registration failed:', error)
     },

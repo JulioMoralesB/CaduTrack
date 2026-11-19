@@ -22,6 +22,7 @@ import {
   type SortKey,
 } from '@/filters'
 import { useCategories } from '@/hooks/useCategories'
+import { useHoldReload } from '@/hooks/useHoldReload'
 import { quantityLabel, shortDate } from '@/labels'
 import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
@@ -79,6 +80,9 @@ export function ProductList() {
   const [labelScans, setLabelScans] = useState<LabelScan[]>([])
   const [uploadingLabels, setUploadingLabels] = useState<{ done: number; total: number } | null>(null)
   const [labelError, setLabelError] = useState<string | null>(null)
+  // Photos on their way up live outside any dialog, so a new version must be
+  // told to wait for them — see #175.
+  useHoldReload(scanningReceipt || uploadingLabels !== null)
   // What the undo toast is about: the product as it was just before, and
   // whether all of it left or only one unit of it (see #172). `turn` tells
   // one action from the next on the same product, so each gets its own toast.

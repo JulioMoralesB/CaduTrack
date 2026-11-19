@@ -1,9 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { MODAL_SETTLE_MS } from '@/modalHistory'
 import { ProductList } from '@/pages/ProductList'
-import type { LabelScan, Product } from '@/services/types'
+import type { LabelScan, Product, ShoppingTrip } from '@/services/types'
+import { reloadWhenSafe } from '@/updateGate'
 
 vi.mock('@/services/productsService', () => ({
   listProducts: vi.fn(),
@@ -1137,4 +1139,87 @@ describe('turning the server on from the app', () => {
     expect(screen.queryByText(/Sin conexión/)).not.toBeInTheDocument()
     expect(mockedCurrentTrip.mock.calls.length).toBeGreaterThanOrEqual(2)
   }, 10000)
+})
+
+describe('an update arriving while photos are being sent — see #175', () => {
+  /** Long enough for the update gate to look again after something ends. */
+  async function settle() {
+    await act(() => new Promise((resolve) => setTimeout(resolve, MODAL_SETTLE_MS * 4)))
+  }
+
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => {}
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+
+  it('waits for label photos to finish uploading before reloading', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    const upload = deferred<LabelScan>()
+    mockedQueueLabelScan.mockReturnValue(upload.promise)
+    const reload = vi.fn()
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Agregar' })
+    const input = container.querySelector('input[type="file"][multiple]')
+    if (!input) throw new Error('label file input not found')
+    fireEvent.change(input, { target: { files: [new File(['x'], 'label.jpg', { type: 'image/jpeg' })] } })
+    await waitFor(() => expect(mockedQueueLabelScan).toHaveBeenCalledTimes(1))
+
+    reloadWhenSafe(reload)
+    await settle()
+    expect(reload).not.toHaveBeenCalled()
+
+    upload.resolve({
+      id: 1,
+      created_at: '2026-09-22T00:00:00Z',
+      status: 'pending',
+      name: null,
+      expires_at: null,
+      quantity: null,
+      unit: null,
+      resolved_at: null,
+      product_id: null,
+    })
+    await waitFor(() => expect(screen.queryByText(/Subiendo etiquetas/)).not.toBeInTheDocument())
+    await settle()
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it('does not reload between a receipt being read and its checklist opening', async () => {
+    mockedList.mockResolvedValue({ products: [], cachedAt: null })
+    const read = deferred<ShoppingTrip>()
+    mockedUploadReceipt.mockReturnValue(read.promise)
+    const reload = vi.fn()
+
+    const { container } = render(<ProductList />)
+    await screen.findByRole('button', { name: 'Agregar' })
+    const input = container.querySelector('input[type="file"]')
+    if (!input) throw new Error('receipt file input not found')
+    fireEvent.change(input, { target: { files: [new File(['x'], 'receipt.jpg', { type: 'image/jpeg' })] } })
+    await waitFor(() => expect(mockedUploadReceipt).toHaveBeenCalledTimes(1))
+
+    reloadWhenSafe(reload)
+    await settle()
+    expect(reload).not.toHaveBeenCalled()
+
+    read.resolve({
+      id: 1,
+      created_at: '2026-09-01T00:00:00Z',
+      stated_item_count: null,
+      items: [{ id: 1, name: 'Nopal limpio', quantity: '1.00', is_food: true, resolved_at: null, product_id: null }],
+      counted_quantity: '1.00',
+      reconciled: null,
+    })
+    expect(await screen.findByText('Nopal limpio')).toBeInTheDocument()
+    await settle()
+    expect(reload).not.toHaveBeenCalled()
+
+    // Closing the checklist is the safe moment it was waiting for.
+    fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Cerrar' })[0])
+    await settle()
+    expect(reload).toHaveBeenCalledOnce()
+  })
 })
