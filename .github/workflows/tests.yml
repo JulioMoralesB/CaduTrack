@@ -112,3 +112,8 @@ jobs:
 
       - name: Run tests (vitest)
         run: npm test
+
+      # The wake Worker (see edge/wake/README.md): plain Node, no install.
+      - name: Run tests (wake Worker)
+        working-directory: edge/wake
+        run: node --test

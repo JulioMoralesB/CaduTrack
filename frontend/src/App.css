@@ -882,6 +882,30 @@
   font-weight: 400;
 }
 
+/* "Encender servidor" — see edge/wake/README.md. */
+
+.wake {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+  font-weight: 400;
+}
+
+.state--error .wake {
+  align-items: center;
+}
+
+.wake__problem {
+  margin: 0;
+  color: var(--danger);
+}
+
+.wake__button {
+  min-height: 2.75rem;
+}
+
 /* History */
 
 .product-history {
