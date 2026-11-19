@@ -716,7 +716,7 @@ describe('scanning a receipt', () => {
     // Once this receipt is done, "current" is the older duplicate scan.
     mockedCurrentTrip.mockResolvedValue(olderTrip)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular Espinacas con otro producto' }))
     fireEvent.change(screen.getByLabelText('Vincular Espinacas a un producto existente'), { target: { value: '5' } })
 
     expect(await screen.findByText('Ya no quedan productos pendientes en este recibo.')).toBeInTheDocument()

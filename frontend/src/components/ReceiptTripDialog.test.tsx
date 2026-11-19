@@ -234,13 +234,34 @@ describe('ReceiptTripDialog manual link to existing product', () => {
     const unrelated = product({ id: 9, name: 'Leche entera', created_at: '2026-08-01T00:00:00Z' })
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [unrelated])
 
-    expect(screen.getByRole('button', { name: 'Vincular a producto existente' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Vincular Nopal limpio con otro producto' })).toBeInTheDocument()
+  })
+
+  it('offers it as one tappable button per row, not a small link under every line — see #186', () => {
+    const unrelated = product({ id: 9, name: 'Leche entera', created_at: '2026-08-01T00:00:00Z' })
+    renderDialog(
+      { items: [tripItem({ id: 1, name: 'Nopal limpio' }), tripItem({ id: 2, name: 'Plátano' })] },
+      [unrelated],
+    )
+
+    const more = screen.getByRole('button', { name: 'Vincular Plátano con otro producto' })
+    expect(more).toHaveClass('trip-checklist__more')
+    expect(more).toHaveTextContent('⋯')
+    expect(screen.queryByText('Vincular a producto existente')).not.toBeInTheDocument()
+  })
+
+  it('ticks a line from anywhere on its label, not only the small box', () => {
+    renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio', is_food: true })] })
+
+    fireEvent.click(screen.getByText('Nopal limpio'))
+
+    expect(screen.getByRole('checkbox', { name: /Nopal limpio/ })).not.toBeChecked()
   })
 
   it('hides the manual picker when there is no active product to link to', () => {
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [])
 
-    expect(screen.queryByRole('button', { name: 'Vincular a producto existente' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vincular Nopal limpio con otro producto' })).not.toBeInTheDocument()
   })
 
   it('lists every active product, sorted, once opened', () => {
@@ -248,7 +269,7 @@ describe('ReceiptTripDialog manual link to existing product', () => {
     const yogurt = product({ id: 10, name: 'Yogurt griego', created_at: '2026-08-01T00:00:00Z' })
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [yogurt, leche])
 
-    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular Nopal limpio con otro producto' }))
 
     const select = screen.getByLabelText('Vincular Nopal limpio a un producto existente')
     expect(Array.from(select.querySelectorAll('option')).map((option) => option.textContent)).toEqual([
@@ -262,14 +283,14 @@ describe('ReceiptTripDialog manual link to existing product', () => {
     const consumed = product({ id: 9, name: 'Leche entera', consumed_at: '2026-08-02T00:00:00Z' })
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [consumed])
 
-    expect(screen.queryByRole('button', { name: 'Vincular a producto existente' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vincular Nopal limpio con otro producto' })).not.toBeInTheDocument()
   })
 
   it('links as soon as a product is chosen, with no second confirmation — see #155', async () => {
     const existing = product({ id: 9, name: 'Leche entera' })
     mockedResolve.mockResolvedValue(tripItem({ id: 1, resolved_at: '2026-09-01T00:00:00Z', product_id: 9 }))
     const { onTripChanged } = renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
-    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular Nopal limpio con otro producto' }))
 
     fireEvent.change(screen.getByLabelText('Vincular Nopal limpio a un producto existente'), {
       target: { value: '9' },
@@ -285,12 +306,12 @@ describe('ReceiptTripDialog manual link to existing product', () => {
   it('closes without resolving on cancel', () => {
     const existing = product({ id: 9, name: 'Leche entera' })
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio' })] }, [existing])
-    fireEvent.click(screen.getByRole('button', { name: 'Vincular a producto existente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular Nopal limpio con otro producto' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar vínculo' }))
 
     expect(screen.queryByLabelText('Vincular Nopal limpio a un producto existente')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Vincular a producto existente' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Vincular Nopal limpio con otro producto' })).toBeInTheDocument()
     expect(mockedResolve).not.toHaveBeenCalled()
   })
 
@@ -301,7 +322,7 @@ describe('ReceiptTripDialog manual link to existing product', () => {
       { items: [tripItem({ id: 1, name: 'Nopal limpio' }), tripItem({ id: 2, name: 'Plátano' })] },
       [existing],
     )
-    fireEvent.click(screen.getAllByRole('button', { name: 'Vincular a producto existente' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Vincular Nopal limpio con otro producto' })[0])
 
     fireEvent.change(screen.getByLabelText('Vincular Nopal limpio a un producto existente'), {
       target: { value: '9' },

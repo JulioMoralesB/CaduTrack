@@ -316,45 +316,49 @@ export function ReceiptTripDialog({
                     </button>
                   )}
                   <span className="trip-checklist__quantity">{quantityLabel(item.quantity, null)}</span>
+                  {/* One 44px button per row — see #186. It used to be a
+                      small "Vincular a producto existente" link under every
+                      line: a tiny target, repeated once per product. */}
+                  {activeProducts.length > 0 && !picking && (
+                    <button
+                      type="button"
+                      className="trip-checklist__more"
+                      onClick={() => openManualLink(item)}
+                      disabled={submitting}
+                      aria-label={`Vincular ${item.name} con otro producto`}
+                    >
+                      ⋯
+                    </button>
+                  )}
                 </div>
                 {/* The automatic match above only ever offers the one
                     product findDuplicateToday found — same name, same
                     calendar day. This is for everything else: a different
                     day, or a name the receipt just doesn't match. See #128. */}
-                {activeProducts.length > 0 &&
-                  (picking ? (
-                    <div className="trip-checklist__manual-link">
-                      <select
-                        className="trip-checklist__manual-link-select"
-                        aria-label={`Vincular ${item.name} a un producto existente`}
-                        value=""
-                        onChange={(event) => handleManualPick(item, event.target.value)}
-                      >
-                        <option value="">Elige un producto…</option>
-                        {activeProducts.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
-                      {/* Not "Cancelar" — the dialog's own Cancelar button
-                          below already carries that name, and two controls
-                          sharing one accessible name is exactly what a
-                          screen reader user cannot tell apart. */}
-                      <button type="button" className="trip-checklist__link-button" onClick={closeManualLink}>
-                        Cancelar vínculo
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="trip-checklist__manual-link-toggle"
-                      onClick={() => openManualLink(item)}
-                      disabled={submitting}
+                {activeProducts.length > 0 && picking && (
+                  <div className="trip-checklist__manual-link">
+                    <select
+                      className="trip-checklist__manual-link-select"
+                      aria-label={`Vincular ${item.name} a un producto existente`}
+                      value=""
+                      onChange={(event) => handleManualPick(item, event.target.value)}
                     >
-                      Vincular a producto existente
+                      <option value="">Elige un producto…</option>
+                      {activeProducts.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Not "Cancelar" — the dialog's own Cancelar button
+                        below already carries that name, and two controls
+                        sharing one accessible name is exactly what a
+                        screen reader user cannot tell apart. */}
+                    <button type="button" className="trip-checklist__link-button" onClick={closeManualLink}>
+                      Cancelar vínculo
                     </button>
-                  ))}
+                  </div>
+                )}
                 {linking === item.id && !duplicate && <p className="trip-checklist__status">Vinculando…</p>}
                 {rowErrors[item.id] && (
                   <p className="form__error" role="alert">
