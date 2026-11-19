@@ -105,6 +105,28 @@ describe('ProductCard icon — see #190', () => {
   })
 })
 
+describe('ProductCard summary line — see #191', () => {
+  function summary(): string {
+    return document.querySelector('.product-card__summary')?.textContent ?? ''
+  }
+
+  it('leaves out a bare "1" that says nothing', () => {
+    renderCard({ quantity: '1.00', unit: null, location: 'fridge' })
+
+    expect(summary()).toBe('Refrigerador')
+  })
+
+  it('still shows the quantity when it says something', () => {
+    renderCard({ quantity: '2.00', unit: null, location: 'fridge' })
+    expect(summary()).toBe('2 · Refrigerador')
+  })
+
+  it('still shows one of a unit', () => {
+    renderCard({ quantity: '1.00', unit: 'kg', location: 'pantry' })
+    expect(summary()).toBe('1 kg · Alacena')
+  })
+})
+
 describe('ProductCard expiry date — see #187', () => {
   it('shows the date itself once expanded, to compare with the package', () => {
     renderCard({ expires_at: '2027-12-14', days_until_expiry: 400 })

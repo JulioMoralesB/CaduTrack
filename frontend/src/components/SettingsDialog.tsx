@@ -278,6 +278,15 @@ export function SettingsDialog({
               : 'No hay ninguna alerta programada.'}
           </p>
 
+          {/* Here with the settings it tests, not pinned in the footer
+              where it showed while scrolled to Iconos or Categorías — #191. */}
+          <div className="settings__test">
+            <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
+              {testing ? 'Enviando…' : 'Enviar prueba'}
+            </button>
+          </div>
+          {testResult && <p className="settings__hint">{testResult}</p>}
+
           <p className="settings__section-title">Iconos</p>
 
           <p className={`settings__status settings__status--${current.ollama_configured ? 'ok' : 'missing'}`}>
@@ -307,7 +316,6 @@ export function SettingsDialog({
               {error}
             </p>
           )}
-          {testResult && <p className="settings__hint">{testResult}</p>}
         </div>
       )}
 
@@ -336,9 +344,6 @@ export function SettingsDialog({
             </p>
           )}
           <div className="form__actions">
-            <button type="button" onClick={handleTest} disabled={testing || !current.telegram_configured}>
-              {testing ? 'Enviando…' : 'Enviar prueba'}
-            </button>
             {/* Not "Cerrar": the modal's own × already carries that name. */}
             <button type="button" className="button--primary" onClick={handleClose}>
               Listo

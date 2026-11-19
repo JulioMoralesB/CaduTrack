@@ -890,6 +890,14 @@
   border: 1px solid var(--status-expired);
 }
 
+.settings__test {
+  display: flex;
+}
+
+.settings__test button {
+  min-height: 2.75rem;
+}
+
 .settings__hint {
   font-size: 0.8125rem;
   color: var(--text-muted);

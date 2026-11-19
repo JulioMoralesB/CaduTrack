@@ -93,7 +93,9 @@ function initialState(
     name: product?.name ?? prefill?.name ?? '',
     category_id: product?.category_id?.toString() ?? '',
     // Strip the trailing zeros the API sends so the field is not "2.00".
-    quantity: product ? product.quantity.replace(/\.?0+$/, '') : (prefill?.quantity ?? '1'),
+    // Trailing zeros off either way — the API sends "1.20" and "2.00", and a
+    // receipt or label prefill arrives exactly as sent. See #191.
+    quantity: quantityLabel(product?.quantity ?? prefill?.quantity ?? '1', null),
     unit: product?.unit ?? prefill?.unit ?? '',
     expires_at: product?.expires_at ?? prefill?.expires_at ?? '',
     location: product?.location ?? 'fridge',
