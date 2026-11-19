@@ -78,6 +78,25 @@ function expand() {
   fireEvent.click(toggle())
 }
 
+
+describe('ProductCard expiry date — see #187', () => {
+  it('shows the date itself once expanded, to compare with the package', () => {
+    renderCard({ expires_at: '2027-12-14', days_until_expiry: 400 })
+
+    expect(screen.queryByText('Caduca el 14 de diciembre de 2027')).not.toBeInTheDocument()
+    expand()
+
+    expect(screen.getByText('Caduca el 14 de diciembre de 2027')).toBeInTheDocument()
+  })
+
+  it('says it in the past once it has expired', () => {
+    renderCard({ expires_at: '2026-09-01', days_until_expiry: -3, status: 'expired' })
+    expand()
+
+    expect(screen.getByText('Caducó el 1 de septiembre de 2026')).toBeInTheDocument()
+  })
+})
+
 describe('ProductCard quantity stepper', () => {
   it('sends +1 and reports the server response back to the list', async () => {
     const updated = product({ quantity: '4.00' })

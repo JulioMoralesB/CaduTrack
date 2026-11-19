@@ -2,7 +2,7 @@ import { isAxiosError } from 'axios'
 import { useState } from 'react'
 
 import { IconPicker } from '@/components/IconPicker'
-import { LOCATION_LABELS, expiryPhrase, quantityLabel } from '@/labels'
+import { LOCATION_LABELS, expiryPhrase, fullDate, quantityLabel } from '@/labels'
 import { canStepDown } from '@/quantity'
 import { toErrorMessage } from '@/services/api'
 import { adjustProductQuantity, consumeProduct, setProductIcon, spoilProduct } from '@/services/productsService'
@@ -260,6 +260,11 @@ export function ProductCard({
 
       {expanded && (
         <div id={detailsId} className="product-card__details">
+          {/* The date itself, for the package in hand — see #187. The
+              summary line only counts days, or months further out. */}
+          <p className="product-card__date">
+            {product.days_until_expiry < 0 ? 'Caducó' : 'Caduca'} el {fullDate(product.expires_at)}
+          </p>
           <p className="product-card__meta">
             {product.category ? (
               <span>{product.category.name}</span>

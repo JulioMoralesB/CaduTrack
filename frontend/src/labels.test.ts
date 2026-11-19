@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dayMonth, expiryPhrase, quantityLabel } from '@/labels'
+import { dayMonth, expiryPhrase, fullDate, quantityLabel } from '@/labels'
 
 describe('expiryPhrase', () => {
   it('says today rather than "in 0 days"', () => {
@@ -15,6 +15,29 @@ describe('expiryPhrase', () => {
   it('counts forwards and backwards', () => {
     expect(expiryPhrase(5)).toBe('Caduca en 5 días')
     expect(expiryPhrase(-3)).toBe('Caducó hace 3 días')
+  })
+
+  it('keeps counting days for the next two months — see #187', () => {
+    expect(expiryPhrase(30)).toBe('Caduca en 30 días')
+    expect(expiryPhrase(60)).toBe('Caduca en 60 días')
+    expect(expiryPhrase(-60)).toBe('Caducó hace 60 días')
+  })
+
+  it('switches to months, then years, further out than that', () => {
+    expect(expiryPhrase(61)).toBe('Caduca en unos 2 meses')
+    expect(expiryPhrase(90)).toBe('Caduca en unos 3 meses')
+    expect(expiryPhrase(200)).toBe('Caduca en unos 7 meses')
+    expect(expiryPhrase(364)).toBe('Caduca en unos 12 meses')
+    expect(expiryPhrase(400)).toBe('Caduca en más de un año')
+    expect(expiryPhrase(800)).toBe('Caduca en unos 2 años')
+    expect(expiryPhrase(-100)).toBe('Caducó hace unos 3 meses')
+  })
+})
+
+describe('fullDate', () => {
+  it('spells out the whole date, as the calendar day it is — see #187', () => {
+    expect(fullDate('2027-12-14')).toBe('14 de diciembre de 2027')
+    expect(fullDate('2026-09-01')).toBe('1 de septiembre de 2026')
   })
 })
 
