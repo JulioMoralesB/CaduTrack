@@ -467,9 +467,14 @@ describe('consuming a product', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Marcar Leche entera como consumido' }))
 
     expect(await screen.findByText('Consumido: Leche entera')).toBeInTheDocument()
+    // The floating Agregar moves up out of the toast's way — see #176.
+    expect(screen.getByRole('button', { name: 'Agregar' }).closest('.add-menu')).toHaveClass('add-menu--raised')
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
 
     await waitFor(() => expect(mockedRestore).toHaveBeenCalledWith(1))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Agregar' }).closest('.add-menu')).not.toHaveClass('add-menu--raised'),
+    )
     // Back from the server through a reload, not re-inserted locally.
     await waitFor(() => expect(mockedList).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.queryByText('Consumido: Leche entera')).not.toBeInTheDocument())

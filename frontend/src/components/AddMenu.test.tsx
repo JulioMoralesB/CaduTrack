@@ -74,3 +74,24 @@ describe('AddMenu — see #147', () => {
     expect(screen.getByRole('button', { name: /^Varias etiquetas/ })).toBeEnabled()
   })
 })
+
+describe('AddMenu floating at the bottom — see #176', () => {
+  it('is a round button reachable anywhere down the list', () => {
+    renderMenu()
+
+    expect(toggle().closest('.add-menu')).toHaveClass('add-menu--floating')
+  })
+
+  it('moves up out of the way of the undo toast', () => {
+    renderMenu({ raised: true })
+
+    expect(toggle().closest('.add-menu')).toHaveClass('add-menu--raised')
+  })
+
+  it('stays down when there is no toast', () => {
+    renderMenu()
+
+    expect(toggle().closest('.add-menu')).not.toHaveClass('add-menu--raised')
+  })
+})
+
