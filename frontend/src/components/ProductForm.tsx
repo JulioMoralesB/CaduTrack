@@ -37,6 +37,12 @@ interface ProductFormProps {
    *  it without a second request. */
   onSaved: (product: Product) => void
   onCancel: () => void
+  /** The secondary button's label. "Omitir" inside a receipt or label walk,
+   *  where it skips this product rather than cancelling anything — #184. */
+  cancelLabel?: string
+  /** What × and the back button do, when that isn't onCancel. In a walk
+   *  they leave the walk for its checklist instead of skipping — #184. */
+  onLeave?: () => void
   /** Overrides the default "Agregar producto"/"Editar producto" title —
    *  used when this form is one step of a larger flow (adding items from a
    *  shopping trip, see #84) so the user can see progress through it. */
@@ -108,6 +114,8 @@ export function ProductForm({
   nameSuggestions = [],
   onSaved,
   onCancel,
+  cancelLabel = 'Cancelar',
+  onLeave,
   title,
 }: ProductFormProps) {
   // Kept to tell a form someone has worked on from one just opened — see
@@ -399,7 +407,7 @@ export function ProductForm({
   return (
     <Modal
       title={title ?? (isEdit ? 'Editar producto' : 'Agregar producto')}
-      onClose={onCancel}
+      onClose={onLeave ?? onCancel}
       dismissOnBackdrop={!somethingToLose}
     >
       <form className="form" onSubmit={handleSubmit}>
@@ -707,7 +715,7 @@ export function ProductForm({
           ) : (
             <div className="form__actions">
               <button type="button" onClick={onCancel} disabled={saving}>
-                Cancelar
+                {cancelLabel}
               </button>
               <button type="submit" className="button--primary" disabled={saving}>
                 {saving ? (

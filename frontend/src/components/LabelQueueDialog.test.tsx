@@ -208,12 +208,23 @@ describe('LabelQueueDialog adding', () => {
     expect(screen.getByRole('heading', { name: 'Agregar producto (quedan 2)' })).toBeInTheDocument()
     expect(screen.getByLabelText('Nombre')).toHaveValue('Yogur natural')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
     expect(screen.getByRole('heading', { name: 'Agregar producto' })).toBeInTheDocument()
     expect(screen.getByLabelText('Nombre')).toHaveValue('Jamón de pavo')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
     expect(screen.getByRole('heading', { name: 'Etiquetas' })).toBeInTheDocument()
+  })
+
+  it('leaves the walk with × and goes back to the list — see #184', () => {
+    renderDialog([scan({ id: 1, name: 'Yogur natural' }), scan({ id: 2, name: 'Jamón de pavo' })])
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar las 2 leídas' }))
+    expect(screen.getByRole('heading', { name: 'Agregar producto (quedan 2)' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(screen.getByRole('heading', { name: 'Etiquetas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Agregar las 2 leídas' })).toBeInTheDocument()
   })
 
   it('skips a photo that left the queue since the walk started', () => {
