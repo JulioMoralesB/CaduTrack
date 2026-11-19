@@ -17,11 +17,30 @@ export const LOCATION_LABELS: Record<Location, string> = {
 export function expiryPhrase(daysUntilExpiry: number): string {
   if (daysUntilExpiry < 0) {
     const days = Math.abs(daysUntilExpiry)
-    return days === 1 ? 'Caducó ayer' : `Caducó hace ${days} días`
+    return days === 1 ? 'Caducó ayer' : `Caducó hace ${roughSpan(days)}`
   }
   if (daysUntilExpiry === 0) return 'Caduca hoy'
   if (daysUntilExpiry === 1) return 'Caduca mañana'
-  return `Caduca en ${daysUntilExpiry} días`
+  return `Caduca en ${roughSpan(daysUntilExpiry)}`
+}
+
+/** Days are the useful unit for about two months; past that, "en 400 días"
+ *  takes arithmetic to turn into anything — see #187. The exact date is in
+ *  the expanded card. */
+const DAYS_SPELLED_OUT = 60
+
+function roughSpan(days: number): string {
+  if (days <= DAYS_SPELLED_OUT) return `${days} días`
+  if (days < 365) return `unos ${Math.round(days / 30.44)} meses`
+  const years = Math.round(days / 365.25)
+  return years <= 1 ? 'más de un año' : `unos ${years} años`
+}
+
+/** "14 de diciembre de 2027" for a date-only value — the whole date, for
+ *  comparing with the one printed on the package. See #187. */
+export function fullDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 /**
