@@ -74,10 +74,36 @@ function toggle() {
 
 /** Opens the card's details, where the stepper, Editar and Eliminar live —
  *  see #140. */
+/** "Cambiar icono" lives in the expanded card — see #190. */
+function openIconPicker() {
+  expand()
+  fireEvent.click(screen.getByRole('button', { name: 'Cambiar el icono de Plátano' }))
+}
+
 function expand() {
   fireEvent.click(toggle())
 }
 
+
+describe('ProductCard icon — see #190', () => {
+  it('expands the card when the icon is tapped, like the rest of the row', () => {
+    renderCard({ icon: '\u{1F34C}' })
+
+    fireEvent.click(screen.getByText('\u{1F34C}'))
+
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.queryByRole('button', { name: 'Otro…' })).not.toBeInTheDocument()
+  })
+
+  it('offers "Cambiar icono" only in the expanded card', () => {
+    renderCard()
+    expect(screen.queryByRole('button', { name: 'Cambiar el icono de Plátano' })).not.toBeInTheDocument()
+
+    openIconPicker()
+
+    expect(screen.getByRole('button', { name: 'Otro…' })).toBeInTheDocument()
+  })
+})
 
 describe('ProductCard expiry date — see #187', () => {
   it('shows the date itself once expanded, to compare with the package', () => {
@@ -175,16 +201,16 @@ describe('ProductCard quantity stepper', () => {
 })
 
 describe('ProductCard icon override', () => {
-  it('shows the current icon as a button, not the raw name text alone', () => {
+  it('shows the current icon on the card', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
+    expect(toggle()).toHaveTextContent('\u{1F34C}')
   })
 
   it('clicking the icon opens a grid of common emoji, highlighting the current one', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
 
     const current = screen.getByRole('button', { name: '\u{1F34C}' })
     expect(current).toHaveAttribute('aria-pressed', 'true')
@@ -197,7 +223,7 @@ describe('ProductCard icon override', () => {
     mockedSetIcon.mockResolvedValue(updated)
     const { onProductChanged } = renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: '\u{1F34E}' }))
 
     await waitFor(() => expect(onProductChanged).toHaveBeenCalledWith(updated))
@@ -207,7 +233,7 @@ describe('ProductCard icon override', () => {
   it('tapping the current icon again in the grid is a no-op, not a wasted request', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: '\u{1F34C}' }))
 
     expect(mockedSetIcon).not.toHaveBeenCalled()
@@ -216,7 +242,7 @@ describe('ProductCard icon override', () => {
   it('"Otro" reveals a text field prefilled with the current icon, for anything not in the grid', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
 
     expect(screen.getByLabelText('Cambiar icono de Plátano')).toHaveValue('\u{1F34C}')
@@ -227,7 +253,7 @@ describe('ProductCard icon override', () => {
     mockedSetIcon.mockResolvedValue(updated)
     const { onProductChanged } = renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     const input = screen.getByLabelText('Cambiar icono de Plátano')
     fireEvent.change(input, { target: { value: '\u{1F9C1}' } })
@@ -241,7 +267,7 @@ describe('ProductCard icon override', () => {
     mockedSetIcon.mockResolvedValue(product({ icon: '\u{1F9C1}', icon_source: 'manual' }))
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     const input = screen.getByLabelText('Cambiar icono de Plátano')
     fireEvent.change(input, { target: { value: '\u{1F9C1}' } })
@@ -253,31 +279,31 @@ describe('ProductCard icon override', () => {
   it('leaving "Otro" unchanged closes the editor without a request', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     fireEvent.blur(screen.getByLabelText('Cambiar icono de Plátano'))
 
     expect(mockedSetIcon).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cambiar el icono de Plátano' })).toBeInTheDocument()
   })
 
   it('Escape in "Otro" cancels without saving, even if the field was changed', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     const input = screen.getByLabelText('Cambiar icono de Plátano')
     fireEvent.change(input, { target: { value: '\u{1F9C1}' } })
     fireEvent.keyDown(input, { key: 'Escape' })
 
     expect(mockedSetIcon).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
+    expect(toggle()).toHaveTextContent('\u{1F34C}')
   })
 
   it('an empty "Otro" field closes the editor without a request rather than sending a blank icon', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Otro…' }))
     const input = screen.getByLabelText('Cambiar icono de Plátano')
     fireEvent.change(input, { target: { value: '   ' } })
@@ -289,7 +315,7 @@ describe('ProductCard icon override', () => {
   it('"Cerrar" closes the picker without saving', () => {
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar selector de icono' }))
 
     expect(mockedSetIcon).not.toHaveBeenCalled()
@@ -305,7 +331,7 @@ describe('ProductCard icon override', () => {
     )
     renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: '\u{1F34E}' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: '\u{1F34E}' })).toBeDisabled())
@@ -319,12 +345,12 @@ describe('ProductCard icon override', () => {
     mockedSetIcon.mockRejectedValue(new Error('nope'))
     const { onProductChanged } = renderCard({ icon: '\u{1F34C}' })
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar icono de Plátano/i }))
+    openIconPicker()
     fireEvent.click(screen.getByRole('button', { name: '\u{1F34E}' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ocurrió un error inesperado.')
     expect(onProductChanged).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: /cambiar icono de Plátano/i })).toHaveTextContent('\u{1F34C}')
+    expect(toggle()).toHaveTextContent('\u{1F34C}')
   })
 })
 

@@ -156,17 +156,10 @@ export function ProductCard({
   return (
     <li className={`product-card product-card--${product.status}${expanded ? ' product-card--expanded' : ''}`}>
       <div className="product-card__row">
-        <button
-          type="button"
-          className="product-card__icon-button"
-          onClick={startEditingIcon}
-          aria-label={`Cambiar icono de ${product.name}, actualmente ${product.icon}`}
-        >
-          {product.icon}
-        </button>
-
         {/* The accordion pattern: the heading holds the toggle, so the list
-            is still navigable heading by heading. */}
+            is still navigable heading by heading. The icon is inside it —
+            see #190: as its own button it opened the icon picker, right
+            where a tap meant to open the card lands a little to the left. */}
         <h2 className="product-card__name">
           <button
             type="button"
@@ -175,17 +168,22 @@ export function ProductCard({
             aria-expanded={expanded}
             aria-controls={detailsId}
           >
-            {/* Its own element so a caller can read the name without the
-                rest of the toggle's text mixed in — see ProductList.test.tsx's
-                headingNames() helper. */}
-            <span className="product-card__name-text">{product.name}</span>
-            <time className="product-card__expiry" dateTime={product.expires_at}>
-              {expiryPhrase(product.days_until_expiry)}
-            </time>
-            <span className="product-card__summary">
-              <span>{quantityLabel(product.quantity, product.unit)}</span>
-              <span aria-hidden="true"> · </span>
-              <span>{LOCATION_LABELS[product.location]}</span>
+            <span className="product-card__icon" aria-hidden="true">
+              {product.icon}
+            </span>
+            <span className="product-card__text">
+              {/* Its own element so a caller can read the name without the
+                  rest of the toggle's text mixed in — see ProductList.test.tsx's
+                  headingNames() helper. */}
+              <span className="product-card__name-text">{product.name}</span>
+              <time className="product-card__expiry" dateTime={product.expires_at}>
+                {expiryPhrase(product.days_until_expiry)}
+              </time>
+              <span className="product-card__summary">
+                <span>{quantityLabel(product.quantity, product.unit)}</span>
+                <span aria-hidden="true"> · </span>
+                <span>{LOCATION_LABELS[product.location]}</span>
+              </span>
             </span>
           </button>
         </h2>
@@ -319,6 +317,10 @@ export function ProductCard({
             </button>
             <button type="button" onClick={() => onEdit(product)} aria-label={`Editar ${product.name}`}>
               Editar
+            </button>
+            {/* With the other occasional actions — see #190. */}
+            <button type="button" onClick={startEditingIcon} aria-label={`Cambiar el icono de ${product.name}`}>
+              Cambiar icono
             </button>
             <button
               type="button"
