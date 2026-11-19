@@ -393,6 +393,46 @@ re-deriving.
 
 ---
 
+## Health and idle shutdown
+
+`GET /health` needs no auth, like every read. Besides liveness, it tells a
+script on the server whether anyone is using the app, so it can turn the
+server off after a stretch of inactivity — see #215:
+
+```json
+{
+  "status": "ok",
+  "database": "ok",
+  "version": "v1.17.0",
+  "last_user_activity_at": "2026-11-19T18:42:07.512331+00:00",
+  "started_at": "2026-11-19T17:03:55.104822+00:00",
+  "busy": false
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `last_user_activity_at` | When a person last made a request, or `null` if nobody has since the API started |
+| `started_at` | When the API process started |
+| `busy` | `true` while label photos are waiting to be read or a receipt is being read |
+
+**A person** is a request whose `Cf-Access-Jwt-Assertion` verifies against
+the Access app (signature, audience, expiry) and carries an `email` claim,
+to anything but `/health` and `/summary`. A service token's JWT has no
+`email`, so machine clients never count. The check runs off the request
+path: a slow or unreachable JWKS endpoint never fails or delays a request,
+it only goes unrecorded. With Cloudflare Access not configured, nothing
+ever counts.
+
+Kept in memory only, so a restart begins at `null`. No identity is
+exposed: two times and a boolean.
+
+**Known gap:** requests through the LAN-only proxy hostname skip
+Cloudflare Access, carry no JWT, and never count as activity. Use the
+public hostname at home too.
+
+---
+
 ## Releases
 
 Docker images are published to GHCR by `.github/workflows/release.yml`, which
