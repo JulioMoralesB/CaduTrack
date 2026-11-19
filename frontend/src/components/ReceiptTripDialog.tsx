@@ -102,6 +102,10 @@ export function ReceiptTripDialog({
   const replaceItem = (updated: ShoppingTripItem) =>
     setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)))
 
+  // What the add button will do, said on the button itself — see #185.
+  const tickedCount = pending.filter((item) => ticked[item.id] ?? item.is_food).length
+  const untickedCount = pending.length - tickedCount
+
   /** Drops every unticked line, then starts walking through the ticked
    *  ones — see the module docstring for why adding is sequential. */
   const handleContinue = () => {
@@ -389,29 +393,55 @@ export function ReceiptTripDialog({
             </div>
           </div>
         ) : (
-          <div className="form__actions">
-            {pending.length > 0 && (
-              <button
-                type="button"
-                className="button--danger-text form__actions-start"
-                onClick={() => setConfirmingDiscard(true)}
-                disabled={submitting}
-              >
-                Descartar recibo
-              </button>
+          <>
+            {/* The add button drops every unticked line for good — see #185.
+                Said before the tap, since a line can start unticked for
+                reasons nobody chose (the model's is_food guess, a name added
+                today). */}
+            {tickedCount > 0 && untickedCount > 0 && (
+              <p className="settings__hint">
+                {untickedCount === 1 ? 'Se descarta 1 sin marcar.' : `Se descartan ${untickedCount} sin marcar.`}
+              </p>
             )}
-            {/* "Cancelar", not "Cerrar": the modal's own × close button already
-                carries that label — see the done screen's own note. Once nothing
-                is left there's nothing to cancel, so it becomes "Entendido". */}
-            <button type="button" onClick={onClose} disabled={submitting}>
-              {pending.length > 0 ? 'Cancelar' : 'Entendido'}
-            </button>
-            {pending.length > 0 && (
-              <button type="button" className="button--primary" onClick={handleContinue} disabled={submitting}>
-                {submitting ? 'Procesando…' : 'Continuar'}
+            <div className="form__actions">
+              {/* With nothing ticked, adding would only discard everything:
+                  the primary action below is then this same discard, so it
+                  isn't offered twice. */}
+              {pending.length > 0 && tickedCount > 0 && (
+                <button
+                  type="button"
+                  className="button--danger-text form__actions-start"
+                  onClick={() => setConfirmingDiscard(true)}
+                  disabled={submitting}
+                >
+                  Descartar recibo
+                </button>
+              )}
+              {/* "Cancelar", not "Cerrar": the modal's own × close button already
+                  carries that label — see the done screen's own note. Once nothing
+                  is left there's nothing to cancel, so it becomes "Entendido". */}
+              <button type="button" onClick={onClose} disabled={submitting}>
+                {pending.length > 0 ? 'Cancelar' : 'Entendido'}
               </button>
-            )}
-          </div>
+              {pending.length > 0 && tickedCount > 0 && (
+                <button type="button" className="button--primary" onClick={handleContinue} disabled={submitting}>
+                  {submitting
+                    ? 'Procesando…'
+                    : `Agregar ${tickedCount} ${tickedCount === 1 ? 'producto' : 'productos'}`}
+                </button>
+              )}
+              {pending.length > 0 && tickedCount === 0 && (
+                <button
+                  type="button"
+                  className="button--danger"
+                  onClick={() => setConfirmingDiscard(true)}
+                  disabled={submitting}
+                >
+                  Descartar recibo
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
     </Modal>

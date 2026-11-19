@@ -24,6 +24,9 @@ const mockedCreate = vi.mocked(products.createProduct)
 const mockedDrop = vi.mocked(trips.dropTripItem)
 const mockedResolve = vi.mocked(trips.resolveTripItem)
 
+/** The add button — its label says how many it adds, see #185. */
+const ADD_BUTTON = /^Agregar \d+ productos?$/
+
 function tripItem(overrides: Partial<ShoppingTripItem> = {}): ShoppingTripItem {
   return {
     id: 1,
@@ -313,20 +316,50 @@ describe('ReceiptTripDialog manual link to existing product', () => {
 
 describe('ReceiptTripDialog continue', () => {
   it('drops every unticked item and notifies the parent', async () => {
-    mockedDrop.mockResolvedValue(tripItem({ resolved_at: '2026-09-01T00:00:00Z' }))
-    const { onTripChanged } = renderDialog({ items: [tripItem({ is_food: false })] })
+    mockedCreate.mockReturnValue(new Promise(() => {}))
+    mockedDrop.mockResolvedValue(tripItem({ id: 2, resolved_at: '2026-09-01T00:00:00Z' }))
+    const { onTripChanged } = renderDialog({
+      items: [tripItem({ id: 1, is_food: true }), tripItem({ id: 2, name: 'Bolsa', is_food: false })],
+    })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
 
-    await waitFor(() => expect(mockedDrop).toHaveBeenCalledWith(1, 1))
+    await waitFor(() => expect(mockedDrop).toHaveBeenCalledWith(1, 2))
+    expect(mockedDrop).toHaveBeenCalledTimes(1)
     expect(onTripChanged).toHaveBeenCalled()
+  })
+
+  it('says how many it adds, and that the unticked ones are discarded — see #185', () => {
+    renderDialog({
+      items: [
+        tripItem({ id: 1, name: 'Nopal limpio', is_food: true }),
+        tripItem({ id: 2, name: 'Plátano', is_food: true }),
+        tripItem({ id: 3, name: 'Bolsa', is_food: false }),
+        tripItem({ id: 4, name: 'Servilletas', is_food: false }),
+      ],
+    })
+
+    expect(screen.getByRole('button', { name: 'Agregar 2 productos' })).toBeInTheDocument()
+    expect(screen.getByText('Se descartan 2 sin marcar.')).toBeInTheDocument()
+
+    // Ticking one more changes both.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Bolsa/ }))
+    expect(screen.getByRole('button', { name: 'Agregar 3 productos' })).toBeInTheDocument()
+    expect(screen.getByText('Se descarta 1 sin marcar.')).toBeInTheDocument()
+  })
+
+  it('says nothing about discarding when every line is ticked', () => {
+    renderDialog({ items: [tripItem({ id: 1, is_food: true })] })
+
+    expect(screen.getByRole('button', { name: 'Agregar 1 producto' })).toBeInTheDocument()
+    expect(screen.queryByText(/sin marcar/)).not.toBeInTheDocument()
   })
 
   it('does not drop a ticked item', async () => {
     mockedCreate.mockReturnValue(new Promise(() => {})) // leave the add phase pending
     renderDialog({ items: [tripItem({ is_food: true })] })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
 
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toBeInTheDocument())
     expect(mockedDrop).not.toHaveBeenCalled()
@@ -341,7 +374,7 @@ describe('ReceiptTripDialog continue', () => {
       ],
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
 
     expect(await screen.findByText('Agregar producto (quedan 2)')).toBeInTheDocument()
     expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio')
@@ -356,20 +389,26 @@ describe('ReceiptTripDialog continue', () => {
       [{ name: 'Nopal limpio', category_id: null, location: 'pantry', shelf_days: null }],
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
     await screen.findByLabelText('Nombre')
     fireEvent.blur(screen.getByLabelText('Nombre'))
 
     expect(within(screen.getByRole('group', { name: 'Dónde está' })).getByRole('button', { pressed: true })).toHaveTextContent('Alacena')
   })
 
-  it('goes straight to the done screen when nothing was ticked', async () => {
+  it('with nothing ticked, offers only to discard, behind the same confirmation — see #185', async () => {
     mockedDrop.mockResolvedValue(tripItem({ resolved_at: '2026-09-01T00:00:00Z' }))
     renderDialog({ items: [tripItem({ is_food: false })] })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(screen.queryByRole('button', { name: ADD_BUTTON })).not.toBeInTheDocument()
+    // One way to discard, not two side by side.
+    expect(screen.getAllByRole('button', { name: 'Descartar recibo' })).toHaveLength(1)
 
-    expect(await screen.findByText('Listo — se procesó todo el recibo.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar recibo' }))
+    expect(mockedDrop).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, descartar' }))
+
+    expect(await screen.findByText('Ya no quedan productos pendientes en este recibo.')).toBeInTheDocument()
   })
 })
 
@@ -383,7 +422,7 @@ describe('ReceiptTripDialog adding', () => {
         tripItem({ id: 2, name: 'Plátano', is_food: true }),
       ],
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
     await screen.findByText('Agregar producto (quedan 2)')
 
     fillDateAndSubmit()
@@ -400,7 +439,7 @@ describe('ReceiptTripDialog adding', () => {
         tripItem({ id: 2, name: 'Plátano', is_food: true }),
       ],
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toHaveValue('Nopal limpio'))
 
     // Says what it does inside a walk — see #184.
@@ -418,7 +457,7 @@ describe('ReceiptTripDialog adding', () => {
         tripItem({ id: 3, name: 'Jitomate', is_food: true }),
       ],
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
     await screen.findByText('Agregar producto (quedan 3)')
 
     fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
@@ -426,7 +465,7 @@ describe('ReceiptTripDialog adding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
 
     // The checklist again, not the next product and not the done screen.
-    expect(await screen.findByRole('button', { name: 'Continuar' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: ADD_BUTTON })).toBeInTheDocument()
     expect(screen.queryByLabelText('Nombre')).not.toBeInTheDocument()
     expect(screen.getByText('Nopal limpio')).toBeInTheDocument()
     expect(screen.getByText('Plátano')).toBeInTheDocument()
@@ -436,7 +475,7 @@ describe('ReceiptTripDialog adding', () => {
 
   it('shows the done screen after the last item, and closing keeps a skipped item pending', async () => {
     renderDialog({ items: [tripItem({ id: 1, name: 'Nopal limpio', is_food: true })] })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
     await waitFor(() => expect(screen.getByLabelText('Nombre')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Omitir' }))
@@ -449,9 +488,12 @@ describe('ReceiptTripDialog adding', () => {
   })
 
   it('closes the whole dialog from the done screen', async () => {
-    mockedDrop.mockResolvedValue(tripItem({ resolved_at: '2026-09-01T00:00:00Z' }))
-    const { onClose } = renderDialog({ items: [tripItem({ is_food: false })] })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    mockedCreate.mockResolvedValue(product({ id: 5 }))
+    mockedResolve.mockResolvedValue(tripItem({ resolved_at: '2026-09-01T00:00:00Z', product_id: 5 }))
+    const { onClose } = renderDialog({ items: [tripItem({ is_food: true })] })
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
+    await screen.findByLabelText('Nombre')
+    fillDateAndSubmit()
     await screen.findByText('Listo — se procesó todo el recibo.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Entendido' }))
@@ -473,7 +515,7 @@ describe('ReceiptTripDialog adding', () => {
         tripItem({ id: 2, name: 'Plátano', is_food: true }),
       ],
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
     await screen.findByText('Agregar producto (quedan 2)')
 
     fillDateAndSubmit()
@@ -522,6 +564,6 @@ describe('ReceiptTripDialog telling receipts apart — see #153', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
 
     expect(mockedDrop).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Continuar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: ADD_BUTTON })).toBeInTheDocument()
   })
 })
