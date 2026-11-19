@@ -402,6 +402,15 @@ describe('ReceiptTripDialog continue', () => {
     expect(screen.getByLabelText('Cantidad')).toHaveValue(1)
   })
 
+  it('prefills the quantity without the trailing zeros the API sends — see #191', async () => {
+    mockedCreate.mockReturnValue(new Promise(() => {}))
+    renderDialog({ items: [tripItem({ id: 1, name: 'Plátano', quantity: '1.20', is_food: true })] })
+
+    fireEvent.click(screen.getByRole('button', { name: ADD_BUTTON }))
+
+    expect(await screen.findByLabelText('Cantidad')).toHaveDisplayValue('1.2')
+  })
+
   it('threads nameSuggestions through to the queued ProductForm — see #133', async () => {
     mockedCreate.mockReturnValue(new Promise(() => {}))
     renderDialog(

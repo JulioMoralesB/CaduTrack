@@ -126,6 +126,18 @@ describe('SettingsDialog', () => {
     await waitFor(() => expect(onAlertsSaved).toHaveBeenCalledOnce())
   })
 
+  it('offers "Enviar prueba" next to the alert settings, not pinned in the footer — see #191', async () => {
+    mockedGet.mockResolvedValue(response())
+
+    renderDialog()
+    const test = await screen.findByRole('button', { name: 'Enviar prueba' })
+
+    expect(test.closest('.form__footer')).toBeNull()
+    // Before the Iconos section, with the settings it tests.
+    const iconos = screen.getByText('Iconos')
+    expect(test.compareDocumentPosition(iconos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('saves the icon toggle through its own endpoint, leaving the alerts alone', async () => {
     mockedGet.mockResolvedValue(response())
 

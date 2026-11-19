@@ -153,6 +153,8 @@ export function ProductCard({
     })()
   }
 
+  const summaryQuantity = quantityLabel(product.quantity, product.unit)
+
   return (
     <li className={`product-card product-card--${product.status}${expanded ? ' product-card--expanded' : ''}`}>
       <div className="product-card__row">
@@ -180,8 +182,13 @@ export function ProductCard({
                 {expiryPhrase(product.days_until_expiry)}
               </time>
               <span className="product-card__summary">
-                <span>{quantityLabel(product.quantity, product.unit)}</span>
-                <span aria-hidden="true"> · </span>
+                {/* A bare "1" with no unit says nothing — see #191. */}
+                {summaryQuantity !== '1' && (
+                  <>
+                    <span>{summaryQuantity}</span>
+                    <span aria-hidden="true"> · </span>
+                  </>
+                )}
                 <span>{LOCATION_LABELS[product.location]}</span>
               </span>
             </span>
