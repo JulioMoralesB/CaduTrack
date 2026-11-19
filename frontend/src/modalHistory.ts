@@ -35,7 +35,12 @@ const open: OpenModal[] = []
 /** True between asking the browser to go back and its popstate arriving. */
 let tidyingUp = false
 let syncTimer: number | undefined
+/** True while a sync is scheduled but has not run — a dialog just closed and
+ *  its entry may yet be handed to the next one. */
+let syncPending = false
 let listening = false
+/** Waiting for no dialog to be open — see whenNoDialogIsOpen. */
+const waitingForNone: Array<() => void> = []
 
 /** How many dialog entries the current history position accounts for. */
 export function modalDepthInHistory(): number {
@@ -43,6 +48,16 @@ export function modalDepthInHistory(): number {
   if (typeof state !== 'object' || state === null) return 0
   const depth = (state as Record<string, unknown>)[DEPTH_KEY]
   return typeof depth === 'number' ? depth : 0
+}
+
+/** No dialog open, and nothing left to tidy from the last one. */
+function settled(): boolean {
+  return open.length === 0 && !tidyingUp && !syncPending
+}
+
+function runWaitingIfSettled() {
+  if (!settled()) return
+  for (const callback of waitingForNone.splice(0)) callback()
 }
 
 function sync() {
@@ -61,11 +76,16 @@ function sync() {
     const current = typeof state === 'object' && state !== null ? state : {}
     window.history.pushState({ ...current, [DEPTH_KEY]: next }, '')
   }
+  runWaitingIfSettled()
 }
 
 function scheduleSync() {
   window.clearTimeout(syncTimer)
-  syncTimer = window.setTimeout(sync, MODAL_SETTLE_MS)
+  syncPending = true
+  syncTimer = window.setTimeout(() => {
+    syncPending = false
+    sync()
+  }, MODAL_SETTLE_MS)
 }
 
 function onPopState() {
@@ -104,3 +124,18 @@ export function openModal(close: () => void): () => void {
     scheduleSync()
   }
 }
+
+/**
+ * Run `callback` once no dialog is open — right away if none is, otherwise
+ * when the last one has closed and its history entry is gone. See #175: an
+ * update must not reload the page out from under a form.
+ *
+ * "Closed" means settled: a dialog handing over to the next one (a receipt
+ * or label walk) never counts as none being open, and the entry is removed
+ * first, so a reload does not leave back with a step that goes nowhere.
+ */
+export function whenNoDialogIsOpen(callback: () => void): void {
+  waitingForNone.push(callback)
+  runWaitingIfSettled()
+}
+

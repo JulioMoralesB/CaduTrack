@@ -6,8 +6,13 @@ vi.mock('virtual:pwa-register', () => ({
   registerSW: vi.fn(),
 }))
 
+vi.mock('@/updateGate', () => ({
+  reloadWhenSafe: vi.fn(),
+}))
+
 const { registerSW } = await import('virtual:pwa-register')
 const mockedRegisterSW = vi.mocked(registerSW)
+const { reloadWhenSafe } = await import('@/updateGate')
 
 function fakeRegistration(): { registration: ServiceWorkerRegistration; update: ReturnType<typeof vi.fn> } {
   const update = vi.fn()
@@ -75,5 +80,19 @@ describe('registerServiceWorker', () => {
     })
 
     expect(() => registerServiceWorker()).not.toThrow()
+  })
+
+  it('leaves the reload for an update to a safe moment instead of reloading at once — see #175', () => {
+    let onNeedReload: (() => void) | undefined
+    mockedRegisterSW.mockImplementation((options) => {
+      onNeedReload = options?.onNeedReload
+      return vi.fn()
+    })
+
+    registerServiceWorker()
+    onNeedReload?.()
+
+    expect(onNeedReload).toBeDefined()
+    expect(reloadWhenSafe).toHaveBeenCalledOnce()
   })
 })
