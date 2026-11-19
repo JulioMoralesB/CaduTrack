@@ -48,6 +48,8 @@ export function ProductFilters({
   // active filter is never hidden.
   const [moreOpen, setMoreOpen] = useState(filters.categoryId !== 'all' || sort !== 'expiry')
   const active = hasActiveFilters(filters)
+  // What "Más filtros" hides: a filter on behind it must never be invisible.
+  const hiddenActive = filters.categoryId !== 'all' || sort !== 'expiry'
 
   const countByStatus = (status: ExpiryStatus) => products.filter((product) => product.status === status).length
 
@@ -69,47 +71,56 @@ export function ProductFilters({
         enterKeyHint="search"
       />
 
-      <div className="filters__chips">
-        {STATUS_CHIPS.map(({ status, label }) => {
-          const count = countByStatus(status)
-          return (
-            <button
-              key={status}
-              type="button"
-              className={`chip chip--${status}`}
-              aria-pressed={filters.status === status}
-              aria-label={count > 0 ? `${label}, ${count}` : label}
-              onClick={() => toggleStatus(status)}
-            >
-              {label}
-              {count > 0 && (
-                <span className="chip__count" aria-hidden="true">
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
-        {(Object.entries(LOCATION_LABELS) as [Location, string][]).map(([location, label]) => (
-          <button
-            key={location}
-            type="button"
-            className="chip"
-            aria-pressed={filters.location === location}
-            onClick={() => toggleLocation(location)}
-          >
-            {label}
-          </button>
-        ))}
+      {/* "Más filtros" pinned at the start, the chips scrolling beside it —
+          see #189. At the end of the row it sat off-screen on a phone, the
+          only way to category and sort order with nothing to say it's there. */}
+      <div className="filters__row">
         <button
           type="button"
-          className="chip chip--more"
+          className={`chip chip--more${hiddenActive ? ' chip--more-active' : ''}`}
           aria-expanded={moreOpen}
           aria-controls="filters-more"
+          aria-label={hiddenActive ? 'Más filtros, con filtros activos' : 'Más filtros'}
           onClick={() => setMoreOpen((open) => !open)}
         >
-          Más filtros
+          <svg className="chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 5h18l-7 8.5V19l-4 2v-7.5z" />
+          </svg>
+          {hiddenActive && <span className="chip__dot" aria-hidden="true" />}
         </button>
+        <div className="filters__chips">
+          {STATUS_CHIPS.map(({ status, label }) => {
+            const count = countByStatus(status)
+            return (
+              <button
+                key={status}
+                type="button"
+                className={`chip chip--${status}`}
+                aria-pressed={filters.status === status}
+                aria-label={count > 0 ? `${label}, ${count}` : label}
+                onClick={() => toggleStatus(status)}
+              >
+                {label}
+                {count > 0 && (
+                  <span className="chip__count" aria-hidden="true">
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          {(Object.entries(LOCATION_LABELS) as [Location, string][]).map(([location, label]) => (
+            <button
+              key={location}
+              type="button"
+              className="chip"
+              aria-pressed={filters.location === location}
+              onClick={() => toggleLocation(location)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {moreOpen && (

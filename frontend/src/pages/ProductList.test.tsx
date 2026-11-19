@@ -857,6 +857,34 @@ describe('filtering and sorting', () => {
     expect(screen.getByLabelText('Categoría')).toBeInTheDocument()
   })
 
+  it('pins "Más filtros" at the start of the chip row, outside its scroller — see #189', async () => {
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+
+    const more = chip('Más filtros')
+    // Not one of the scrolling chips, where it sat off-screen at the end.
+    expect(more.closest('.filters__chips')).toBeNull()
+    const row = more.parentElement as HTMLElement
+    expect(row.firstElementChild).toBe(more)
+    expect(row.querySelector('.filters__chips')).not.toBeNull()
+  })
+
+  it('marks "Más filtros" while a filter hidden behind it is on', async () => {
+    mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
+
+    render(<ProductList />)
+    await screen.findByText('Yogur')
+    expect(chip('Más filtros')).not.toHaveClass('chip--more-active')
+
+    fireEvent.click(chip('Más filtros'))
+    fireEvent.change(screen.getByLabelText('Ordenar por'), { target: { value: 'name' } })
+
+    expect(chip(/^Más filtros/)).toHaveClass('chip--more-active')
+    expect(chip(/^Más filtros/)).toHaveAccessibleName('Más filtros, con filtros activos')
+  })
+
   it('reorders by name without refetching', async () => {
     mockedList.mockResolvedValue({ products: pantry, cachedAt: null })
 

@@ -730,13 +730,24 @@
   font-size: 1rem;
 }
 
+/* "Más filtros" pinned at the start, the chips scrolling beside it — see
+   #189. Bleeds to the right edge only, so the pinned button keeps the
+   page's left margin. */
+.filters__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: -1rem;
+}
+
 /* One row, scrolled sideways on a phone rather than wrapped into three —
    see #141: the point is getting the list itself higher up the screen. */
 .filters__chips {
   display: flex;
+  flex: 1;
   gap: 0.4rem;
-  margin: 0 -1rem;
-  padding: 0 1rem;
+  min-width: 0;
+  padding-right: 1rem;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -784,6 +795,40 @@
 
 .chip--more[aria-expanded='true'] {
   border-color: var(--accent);
+}
+
+.chip--more {
+  position: relative;
+  justify-content: center;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+}
+
+.chip__icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* A filter on behind "Más filtros" — category or sort order — never goes
+   unseen. */
+.chip--more-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip__dot {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .filters__controls {
