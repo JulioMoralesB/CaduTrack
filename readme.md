@@ -53,6 +53,11 @@ repository does not find out when one of them changes. It has already happened:
 the logging setup in this repo was built around a collector that had been retired
 weeks earlier, because the repo still described it.
 
+The server is not on around the clock. While it is off the installed app shows
+the last list it saw, and offers "Encender servidor", which asks Home Assistant
+to turn it on through a small Cloudflare Worker — see
+[edge/wake/README.md](edge/wake/README.md).
+
 ---
 
 ## Repository Structure
@@ -61,6 +66,7 @@ weeks earlier, because the repo still described it.
 cadutrack/
 ├── frontend/       # React + Vite + TypeScript PWA
 ├── backend/        # FastAPI + PostgreSQL + APScheduler
+├── edge/wake/      # Cloudflare Worker: turn the server on from the app
 └── db/             # cadutrack-db: postgres:16-alpine plus its own first-boot
     ├── Dockerfile  #   init script, baked in — published, not bind-mounted,
     └── init/       #   so a compose.yaml + .env deploy needs nothing else on disk

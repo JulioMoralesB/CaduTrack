@@ -10,6 +10,7 @@ import { ProductHistory } from '@/components/ProductHistory'
 import { ReceiptTripDialog } from '@/components/ReceiptTripDialog'
 import { StaleBanner } from '@/components/StaleBanner'
 import { UndoToast } from '@/components/UndoToast'
+import { WakeServerButton } from '@/components/WakeServerButton'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { downscaleImage } from '@/downscaleImage'
 import {
@@ -24,6 +25,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { quantityLabel, shortDate } from '@/labels'
 import { useNameSuggestions } from '@/hooks/useNameSuggestions'
 import { useProducts } from '@/hooks/useProducts'
+import { useWakeServer } from '@/hooks/useWakeServer'
 import { apiUrl, toErrorMessage } from '@/services/api'
 import { getCurrentLabelScans, queueLabelScan } from '@/services/labelScansService'
 import { deleteProduct, restoreProduct } from '@/services/productsService'
@@ -123,6 +125,21 @@ export function ProductList() {
       .then(setLabelScans)
       .catch(() => {})
   }, [])
+
+  /** Everything this screen loads, fresh — once the server is back on. */
+  const reloadEverything = useCallback(() => {
+    reload()
+    void reloadCategories()
+    void reloadNameSuggestions()
+    getCurrentTrip()
+      .then(setCurrentTrip)
+      .catch(() => {})
+    refreshLabelScans()
+  }, [reload, reloadCategories, reloadNameSuggestions, refreshLabelScans])
+
+  // The server is not on around the clock: offer to turn it on whenever the
+  // list could not come from it — see edge/wake/README.md.
+  const wake = useWakeServer(cachedAt !== null || (error !== null && unreachable), reloadEverything)
 
   // Queued photos from a previous visit — see #134: the queue survives a
   // reload the same way an unfinished trip does.
@@ -397,7 +414,11 @@ export function ProductList() {
         </button>
       )}
 
-      {cachedAt && <StaleBanner cachedAt={cachedAt} />}
+      {cachedAt && (
+        <StaleBanner cachedAt={cachedAt}>
+          <WakeServerButton {...wake} />
+        </StaleBanner>
+      )}
 
       {loading && <p className="state state--loading">Cargando…</p>}
 
@@ -422,6 +443,7 @@ export function ProductList() {
               solo cuando termines.
             </p>
           )}
+          <WakeServerButton {...wake} />
           <button type="button" onClick={reload}>
             Reintentar
           </button>

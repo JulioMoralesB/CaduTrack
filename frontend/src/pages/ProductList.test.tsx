@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { AxiosError } from 'axios'
+import { AxiosError, AxiosHeaders } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProductList } from '@/pages/ProductList'
@@ -49,7 +49,14 @@ vi.mock('@/services/labelScansService', () => ({
   labelScanImageUrl: (id: number) => `/api/label-scans/${id}/image`,
 }))
 
+vi.mock('@/services/wakeService', () => ({
+  wakeAvailable: vi.fn(),
+  requestWake: vi.fn(),
+  serverIsUp: vi.fn(),
+}))
+
 const products = await import('@/services/productsService')
+const wake = await import('@/services/wakeService')
 const categories = await import('@/services/categoriesService')
 const settings = await import('@/services/settingsService')
 const trips = await import('@/services/tripsService')
@@ -123,6 +130,7 @@ beforeEach(() => {
   mockedNameSuggestions.mockResolvedValue([])
   mockedCurrentTrip.mockResolvedValue(null)
   mockedCurrentLabelScans.mockResolvedValue([])
+  vi.mocked(wake.wakeAvailable).mockResolvedValue(false)
 })
 
 describe('ProductList', () => {
@@ -1073,4 +1081,60 @@ describe('managing categories from Ajustes — see #144', () => {
     await waitFor(() => expect(headingNames().filter(Boolean)).toHaveLength(2))
     expect(mockedNameSuggestions.mock.calls.length).toBeGreaterThan(1)
   })
+})
+
+describe('turning the server on from the app', () => {
+  beforeEach(() => {
+    vi.mocked(wake.wakeAvailable).mockResolvedValue(true)
+    vi.mocked(wake.requestWake).mockResolvedValue()
+  })
+
+  it('offers it next to Reintentar when the server cannot be reached', async () => {
+    mockedList.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'))
+
+    render(<ProductList />)
+
+    const errorState = await screen.findByRole('alert')
+    expect(await within(errorState).findByRole('button', { name: 'Encender servidor' })).toBeInTheDocument()
+    expect(within(errorState).getByRole('button', { name: 'Reintentar' })).toBeInTheDocument()
+  })
+
+  it('offers it in the banner over a list from the cache', async () => {
+    mockedList.mockResolvedValue({ products: [product()], cachedAt: new Date() })
+
+    render(<ProductList />)
+
+    const banner = (await screen.findByText(/Sin conexión/)).closest('.stale-banner') as HTMLElement
+    expect(await within(banner).findByRole('button', { name: 'Encender servidor' })).toBeInTheDocument()
+  })
+
+  it('does not offer it for an error the server itself explained', async () => {
+    mockedList.mockRejectedValue(new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+      data: { detail: 'Algo salió mal' },
+      status: 422,
+      statusText: '',
+      headers: {},
+      config: { headers: new AxiosHeaders() },
+    }))
+
+    render(<ProductList />)
+
+    expect(await screen.findByText('Algo salió mal')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Encender servidor' })).not.toBeInTheDocument()
+    expect(wake.wakeAvailable).not.toHaveBeenCalled()
+  })
+
+  it('loads everything fresh once the server answers', async () => {
+    mockedList
+      .mockResolvedValueOnce({ products: [product()], cachedAt: new Date() })
+      .mockResolvedValue({ products: [product({ name: 'Yogur nuevo' })], cachedAt: null })
+    vi.mocked(wake.serverIsUp).mockResolvedValue(true)
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Encender servidor' }))
+
+    expect(await screen.findByText('Yogur nuevo', {}, { timeout: 7000 })).toBeInTheDocument()
+    expect(screen.queryByText(/Sin conexión/)).not.toBeInTheDocument()
+    expect(mockedCurrentTrip.mock.calls.length).toBeGreaterThanOrEqual(2)
+  }, 10000)
 })

@@ -1,0 +1,9 @@
+{
+  "name": "cadutrack-wake",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that asks Home Assistant to turn the CaduTrack server on. See README.md.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

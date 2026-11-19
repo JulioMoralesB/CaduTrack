@@ -1,7 +1,11 @@
+import type { ReactNode } from 'react'
+
 import { apiUrl } from '@/services/api'
 
 interface StaleBannerProps {
   cachedAt: Date
+  /** What can be done about it — "Encender servidor", where offered. */
+  children?: ReactNode
 }
 
 /** Turn a cache timestamp into something a person can judge. */
@@ -38,7 +42,7 @@ function ageLabel(cachedAt: Date): string {
  * even an option: everything just quietly looks like ordinary offline use,
  * forever.
  */
-export function StaleBanner({ cachedAt }: StaleBannerProps) {
+export function StaleBanner({ cachedAt, children }: StaleBannerProps) {
   return (
     <div className="stale-banner" role="status">
       <p className="stale-banner__status">Sin conexión — mostrando datos guardados {ageLabel(cachedAt)}</p>
@@ -46,6 +50,7 @@ export function StaleBanner({ cachedAt }: StaleBannerProps) {
         Si tu sesión expiró, <a href={apiUrl('/reauth')}>reautentícate aquí</a> — te regresa solo
         cuando termines.
       </p>
+      {children}
     </div>
   )
 }
