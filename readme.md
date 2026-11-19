@@ -288,6 +288,65 @@ of settings; every one of them is valid in either file.
 | `ALERT_DAYS_AHEAD`    | Days before expiry to trigger alert                |
 | `TIMEZONE`            | IANA timezone for log timestamps and alert times   |
 | `LOG_FILE`            | Rotating JSON log path; empty means stdout only    |
+| `BACKUP_KEEP_DAYS`    | Root file only — how many days of daily database dumps to keep (default 14) |
+| `BACKUP_DIR`          | Root file only — a host path for the dumps instead of the `cadutrack-db-backups` volume |
+
+---
+
+## Backups
+
+`compose.yaml` runs `cadutrack-db-backup` next to the database: a `pg_dump`
+when it starts and every 24 hours after, into the `cadutrack-db-backups`
+volume (or `BACKUP_DIR`), keeping `BACKUP_KEEP_DAYS` days of them. Each dump is
+the whole database — products, history, categories, remembered barcodes and
+receipt names, settings — and is logged as one JSON line:
+
+```bash
+docker logs cadutrack-db-backup
+```
+
+It is a clean dump, so it can be restored on its own — after a bad migration,
+say — without rolling back anything else. A host that snapshots its Docker
+volumes covers the dumps too, but a snapshot of a running Postgres is only
+crash-consistent; this is the copy to restore from.
+
+### Restoring
+
+From the stack's directory (`/opt/stacks/cadutrack` under Dockge), with the
+stack running:
+
+1. List the dumps and pick one:
+
+   ```bash
+   docker compose exec cadutrack-db-backup ls -l /backups
+   ```
+
+2. Stop the API, so nothing writes while the database is replaced:
+
+   ```bash
+   docker compose stop cadutrack-api
+   ```
+
+3. Restore it — every table is dropped and recreated from the dump:
+
+   ```bash
+   docker compose exec cadutrack-db-backup pg_restore --clean --if-exists --no-owner --dbname=cadutrack /backups/cadutrack-YYYYMMDD-HHMMSS.dump
+   ```
+
+4. Start the API again. It runs migrations on start, so a dump from an older
+   release is brought up to date:
+
+   ```bash
+   docker compose start cadutrack-api
+   ```
+
+This procedure was run end to end for #183 against a throwaway copy of this
+stack: a dump taken, the products table dropped, restored, and the rows and
+Alembic's version row back as they were.
+
+If the database volume itself is gone, bring the stack up as usual first:
+`cadutrack-db` initializes an empty database and its role, and step 3 then
+fills it.
 
 ---
 
