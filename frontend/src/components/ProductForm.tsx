@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 
 import { Modal } from '@/components/Modal'
 import { downscaleImage } from '@/downscaleImage'
@@ -113,6 +113,7 @@ export function ProductForm({
   // Kept to tell a form someone has worked on from one just opened — see
   // `dirty` below.
   const [initial] = useState<FormState>(() => initialState(product, prefill, nameSuggestions))
+  const locationLabelId = useId()
   const [form, setForm] = useState<FormState>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -545,19 +546,25 @@ export function ProductForm({
           </div>
         </div>
 
-        <label className="form__field">
-          <span>Dónde está</span>
-          <select
-            value={form.location}
-            onChange={(event) => update('location', event.target.value as Location)}
-          >
-            {Object.entries(LOCATION_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
+        {/* Three buttons, not a <select> — see #178. Set on almost every
+            product, and on a phone a picker is two taps with the options
+            hidden until the first. */}
+        <div className="form__field">
+          <span id={locationLabelId}>Dónde está</span>
+          <div className="form__chip-row form__chip-row--even" role="group" aria-labelledby={locationLabelId}>
+            {(Object.entries(LOCATION_LABELS) as [Location, string][]).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className="chip"
+                aria-pressed={form.location === value}
+                onClick={() => update('location', value)}
+              >
                 {label}
-              </option>
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
 
         <label className="form__field">
           <span>Categoría</span>

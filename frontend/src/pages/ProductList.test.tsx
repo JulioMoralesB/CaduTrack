@@ -231,7 +231,12 @@ describe('creating a product', () => {
     fireEvent.change(screen.getByLabelText('Caduca el'), { target: { value: '2026-09-10' } })
     fireEvent.change(screen.getByLabelText('Cantidad'), { target: { value: '12' } })
     fireEvent.change(screen.getByLabelText('Unidad'), { target: { value: 'piezas' } })
-    fireEvent.change(screen.getByLabelText('Dónde está'), { target: { value: 'fridge' } })
+    // One tap on a button, not a picker — see #178.
+    const where = within(screen.getByRole('group', { name: 'Dónde está' }))
+    expect(where.getByRole('button', { name: 'Refrigerador' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(where.getByRole('button', { name: 'Congelador' }))
+    expect(where.getByRole('button', { name: 'Congelador' })).toHaveAttribute('aria-pressed', 'true')
+    expect(where.getByRole('button', { name: 'Refrigerador' })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
@@ -241,7 +246,7 @@ describe('creating a product', () => {
       quantity: '12',
       unit: 'piezas',
       expires_at: '2026-09-10',
-      location: 'fridge',
+      location: 'freezer',
       notes: null,
     })
     // Two calls: the initial load and the reload after saving.
