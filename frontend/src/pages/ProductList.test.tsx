@@ -460,6 +460,40 @@ describe('consuming a product', () => {
     await waitFor(() => expect(mockedRestore).toHaveBeenCalledWith(1))
   })
 
+  it('just takes the row off when it had already left the list elsewhere — see #180', async () => {
+    // A list a little behind (another phone, the offline cache): what the
+    // tap asked for has already happened, so there is nothing to report.
+    mockedList.mockResolvedValue({ products: [product({ quantity: '1.00' })], cachedAt: null })
+    const alreadyGone = new AxiosError('Request failed')
+    alreadyGone.response = {
+      data: { detail: 'Ese producto ya no estaba en la lista.' },
+      status: 409,
+      statusText: '',
+      headers: new AxiosHeaders(),
+      config: { headers: new AxiosHeaders() },
+    }
+    mockedConsume.mockRejectedValue(alreadyGone)
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Leche entera como consumido' }))
+
+    await waitFor(() => expect(screen.queryByText('Leche entera')).not.toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    // Nothing to undo: this tap didn't take it off.
+    expect(screen.queryByRole('button', { name: 'Deshacer' })).not.toBeInTheDocument()
+  })
+
+  it('still says so when consuming fails for any other reason', async () => {
+    mockedList.mockResolvedValue({ products: [product({ quantity: '1.00' })], cachedAt: null })
+    mockedConsume.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'))
+
+    render(<ProductList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar Leche entera como consumido' }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('Leche entera')).toBeInTheDocument()
+  })
+
   it('offers to undo it — see #143', async () => {
     mockedList.mockResolvedValue({ products: [product({ quantity: '1.00' })], cachedAt: null })
     mockedConsume.mockResolvedValue(product({ consumed_at: '2026-08-31T12:00:00Z' }))

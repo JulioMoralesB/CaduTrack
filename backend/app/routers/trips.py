@@ -34,21 +34,21 @@ def _with_items(statement):
 def _get_trip_or_404(db: Session, trip_id: int) -> ShoppingTrip:
     trip = db.execute(_with_items(select(ShoppingTrip).where(ShoppingTrip.id == trip_id))).scalar_one_or_none()
     if trip is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ese recibo ya no existe.")
     return trip
 
 
 def _get_item_or_404(db: Session, trip_id: int, item_id: int) -> ShoppingTripItem:
     item = db.get(ShoppingTripItem, item_id)
     if item is None or item.trip_id != trip_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ese artículo ya no está en el recibo.")
     return item
 
 
 def _require_unresolved(item: ShoppingTripItem) -> None:
     if item.resolved_at is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Item has already been resolved"
+            status_code=status.HTTP_409_CONFLICT, detail="Ese artículo ya se había resuelto."
         )
 
 

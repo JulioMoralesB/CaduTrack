@@ -27,13 +27,13 @@ _SERVABLE_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 def _get_scan_or_404(db: Session, scan_id: int) -> LabelScan:
     scan = db.get(LabelScan, scan_id)
     if scan is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Esa foto ya no está en la lista.")
     return scan
 
 
 def _require_unresolved(scan: LabelScan) -> None:
     if scan.resolved_at is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan has already been resolved")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esa foto ya se había resuelto.")
 
 
 def _resolve(scan: LabelScan, product_id: int | None) -> None:
@@ -89,7 +89,7 @@ def get_scan_image(scan_id: int, db: Session = Depends(get_db)) -> Response:
         select(LabelScan).options(undefer(LabelScan.image)).where(LabelScan.id == scan_id)
     ).scalar_one_or_none()
     if scan is None or scan.image is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Esa foto ya no está guardada.")
 
     media_type = scan.image_type if scan.image_type in _SERVABLE_IMAGE_TYPES else "application/octet-stream"
     return Response(
@@ -106,7 +106,7 @@ def retry_scan(scan_id: int, background_tasks: BackgroundTasks, db: Session = De
     scan = _get_scan_or_404(db, scan_id)
     _require_unresolved(scan)
     if scan.status != LabelScanStatus.failed:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only a failed scan can be retried")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solo se puede reintentar una foto que no se pudo leer.")
 
     scan.status = LabelScanStatus.pending
     db.commit()

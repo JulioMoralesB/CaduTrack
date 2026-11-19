@@ -155,7 +155,10 @@ def test_missing_product_is_404(api_client, method, path):
         kwargs = {"json": {"delta": "-1"}}
     elif method == "patch" and path.endswith("/icon"):
         kwargs = {"json": {"icon": "\U0001F34C"}}
-    assert getattr(api_client, method)(path, **kwargs).status_code == 404
+    response = getattr(api_client, method)(path, **kwargs)
+    assert response.status_code == 404
+    # Shown to the user as is — see #180.
+    assert response.json()["detail"] == "Ese producto ya no existe. Puede que se haya borrado desde otro dispositivo."
 
 
 def test_quantity_increments(api_client):
@@ -194,7 +197,9 @@ def test_decrementing_below_zero_is_rejected_without_a_500(api_client):
     response = api_client.patch(f"/products/{product_id}/quantity", json={"delta": "-1"})
 
     assert response.status_code == 422
-    assert "non-positive" in response.json()["detail"]
+    assert response.json()["detail"] == (
+        "La cantidad no puede quedar en cero. Para quitarlo de la lista, márcalo como consumido."
+    )
     # Rejected, not partially applied.
     assert api_client.get(f"/products/{product_id}").json()["quantity"] == "1.00"
 
@@ -554,6 +559,7 @@ def test_consuming_twice_is_rejected_rather_than_silently_reapplied(api_client):
     response = api_client.post(f"/products/{product_id}/consume")
 
     assert response.status_code == 409
+    assert response.json()["detail"] == "Ese producto ya no estaba en la lista."
 
 
 def test_restoring_a_consumed_product_returns_it_to_the_active_list(api_client):
@@ -573,6 +579,7 @@ def test_restoring_a_product_that_was_never_consumed_is_rejected(api_client):
     response = api_client.post(f"/products/{product_id}/restore")
 
     assert response.status_code == 409
+    assert response.json()["detail"] == "Ese producto ya está en la lista."
 
 
 def test_history_lists_only_consumed_products_most_recent_first(api_client):

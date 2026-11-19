@@ -33,7 +33,7 @@ router = APIRouter(prefix="/products", tags=["products"])
 def _get_or_404(db: Session, product_id: int) -> Product:
     product = db.get(Product, product_id)
     if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ese producto ya no existe. Puede que se haya borrado desde otro dispositivo.")
     return product
 
 
@@ -249,7 +249,7 @@ def adjust_quantity(
         # constraint would catch this too, but as a 500 with no useful detail.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Adjusting by {payload.delta} would leave a non-positive quantity",
+            detail="La cantidad no puede quedar en cero. Para quitarlo de la lista, márcalo como consumido.",
         )
 
     db.commit()
@@ -279,7 +279,7 @@ def _remove_from_list(db: Session, product_id: int, *, spoiled: bool) -> Product
     product = _get_or_404(db, product_id)
     if product.consumed_at is not None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Product is already marked as consumed"
+            status_code=status.HTTP_409_CONFLICT, detail="Ese producto ya no estaba en la lista."
         )
 
     product.consumed_at = func.now()
@@ -395,7 +395,7 @@ def restore_product(
     product = _get_or_404(db, product_id)
     if product.consumed_at is None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Product is not marked as consumed"
+            status_code=status.HTTP_409_CONFLICT, detail="Ese producto ya está en la lista."
         )
 
     product.consumed_at = None

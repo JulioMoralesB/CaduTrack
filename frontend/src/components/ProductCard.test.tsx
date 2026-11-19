@@ -58,6 +58,7 @@ function renderCard(overrides: Partial<Product> = {}) {
         onProductChanged={onProductChanged}
         onConsumed={onConsumed}
         onPartConsumed={onPartConsumed}
+        onAlreadyGone={vi.fn()}
       />
     </ul>,
   )
@@ -400,7 +401,7 @@ describe('ProductCard compact layout — see #140', () => {
     const target = product()
     render(
       <ul>
-        <ProductCard product={target} onEdit={onEdit} onDelete={onDelete} onProductChanged={vi.fn()} onConsumed={vi.fn()} onPartConsumed={vi.fn()} />
+        <ProductCard product={target} onEdit={onEdit} onDelete={onDelete} onProductChanged={vi.fn()} onConsumed={vi.fn()} onPartConsumed={vi.fn()} onAlreadyGone={vi.fn()} />
       </ul>,
     )
     fireEvent.click(toggle())
